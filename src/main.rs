@@ -1,7 +1,7 @@
 use std::path::Path;
 use clap::{AppSettings, Arg, Command};
-use log::LevelFilter;
-use crate::config::{Config, VeritasConfig};
+use log::{info, LevelFilter};
+use crate::config::{SaveLoad, VeritasConfig};
 
 mod config;
 mod dumping;

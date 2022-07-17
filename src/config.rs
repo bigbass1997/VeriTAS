@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use log::debug;
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
-pub trait Config: Serialize + DeserializeOwned + Default {
+pub trait SaveLoad: Serialize + DeserializeOwned + Default {
     fn save<P: AsRef<Path>>(&self, path: P) {
         std::fs::write(path, toml::to_string(&self).unwrap()).unwrap();
     }
@@ -40,11 +38,11 @@ impl Default for DumperSection {
 pub struct VeritasConfig {
     pub dumper: DumperSection,
 }
-impl Config for VeritasConfig {}
+impl SaveLoad for VeritasConfig {}
 
 
 
-#[derive(Default, Clone, Deserialize, Serialize)]
+/*#[derive(Default, Clone, Deserialize, Serialize)]
 pub struct HashCache {
     pub hashes: HashMap<String, PathBuf>
 }
@@ -76,7 +74,7 @@ impl HashCache {
             }
         }
     }
-}
+}*/
 
 /*pub fn save<C: Config, P: AsRef<Path>>(config: C, path: P) {
     std::fs::write(path, toml::to_string_pretty(&config).unwrap()).unwrap_or_default();
