@@ -7,7 +7,7 @@ pub fn builder() -> Builder {
     let mut builder = Builder::new();
     
     builder.format(|f, record| {
-        let time = f.timestamp_millis();
+        let time = f.timestamp_millis().to_string().split_once("T").unwrap_or_default().1.replace("Z", "");
         
         let mut style = f.style();
         let level = match record.level() {

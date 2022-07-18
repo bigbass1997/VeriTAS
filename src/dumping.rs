@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 use clap::ArgMatches;
-use log::warn;
+use crossbeam::sync::WaitGroup;
+use log::{info, warn};
 use crate::config::{DumperSection, SaveLoad};
-use crate::dumping::movies::{Movie, Source};
+use crate::dumping::movies::{Format, Movie, Source};
 use crate::dumping::roms::RomCache;
 
 pub mod movies;
@@ -33,22 +34,66 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
     
     // Refresh and save rom cache
     // TODO: Lock refresh behind CLI argument "--refresh"
-    cache.refresh(Some(config.rom_directory));
+    info!("Refreshing rom cache...");
+    cache.refresh(Some(&config.rom_directory));
     cache.save("cache/hashes.toml");
     
     // Match movies to any cached roms
+    info!("Attempting to match movies to roms...");
     let mut prepared = vec![];
     for movie in movies {
         if let Some(hash) = movie.find_hash() {
             if let Some(rom) = cache.search(&hash) {
                 prepared.push((movie, rom));
             } else {
-                warn!("Failed to find matching rom for this movie. Expected hash: {}, Movie: {}", hash, movie.source);
+                warn!("Failed to find matching rom. Expected hash: {}, Movie: {}", hash, movie.source);
             }
         } else {
-            warn!("Failed to find rom hash for this movie. Skipping: {}", movie.source);
+            warn!("Failed to find movie's rom hash. Skipping: {}", movie.source);
         }
     }
     
     // Spin up threads for dump procedure
+    let wg = WaitGroup::new();
+    for (movie, rom) in prepared {
+        info!("Beginning dump: {}", movie.source);
+        
+        match movie.format {
+            Format::Bk2 => {
+                if !config.bizhawk_path.exists() {
+                    warn!("BizHawk path is empty or doesn't exist. Skipping: {}", movie.source);
+                    continue;
+                }
+                
+                
+            },
+            Format::Fm2 => {
+                if !config.fceux_path.exists() {
+                    warn!("FCEUX path is empty or doesn't exist. Skipping: {}", movie.source);
+                    continue;
+                }
+                
+                let config = config.clone();
+                let wg = wg.clone();
+                std::thread::spawn(move || {
+                    let script_path = PathBuf::from("cache/tasd-fceux.lua").canonicalize().unwrap();
+                    
+                    std::process::Command::new("wine")
+                        .args([
+                            &config.fceux_path.display().to_string(),
+                            "-playmovie", &movie.path.display().to_string(),
+                            "-lua", &script_path.display().to_string(),
+                            &rom.path.display().to_string()
+                        ]).output().unwrap();
+                    
+                    info!("Dump complete! {}", movie.source);
+                    
+                    drop(wg);
+                });
+                
+            },
+        }
+    }
+    
+    wg.wait();
 }

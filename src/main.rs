@@ -1,6 +1,6 @@
 use std::path::Path;
 use clap::{AppSettings, Arg, Command};
-use log::{info, LevelFilter};
+use log::LevelFilter;
 use crate::config::{SaveLoad, VeritasConfig};
 
 mod config;
@@ -51,10 +51,10 @@ fn main() {
                 .short('f')
                 .long("fetch")
                 .help("Fetch one or more TASVideos publications and/or submissions. (e.g. 1234M or 1234S, for publication or submission respectively)"))
-            /*.arg(Arg::new("local")
+            .arg(Arg::new("local")
                 .takes_value(true)
                 .long("local")
-                .help("Path to a local movie file."))*/
+                .help("Path to a local movie file."))
             .arg_required_else_help(true))
         .arg(Arg::new("verbose")
             .short('v')

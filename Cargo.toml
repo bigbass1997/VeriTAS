@@ -16,3 +16,5 @@ hex = "0.4"
 #md5 = "0.7"
 sha-1 = "0.10"
 md-5 = "0.10"
+base64ct = { version = "1.0.1", features = ["alloc"] } # zip depedency chain requires password-hash, which requires base64ct >=1, <1.1.0.
+crossbeam = "0.8"

@@ -42,7 +42,7 @@ while (true) do
             local movie_filename = movie.getname()
             local output_filename = string.sub(movie_filename, 0, #movie_filename - 4) .. ".tasd"
             
-            print("Writing to " .. output_filename .. "...")
+            print("Writing to " .. output_filename)
             
             handle = io.open(output_filename, "wb+")
             
@@ -95,6 +95,7 @@ while (true) do
         frame = 0
         movie.stop()
         emu.pause()
+        emu.exit()
     end
     
     emu.frameadvance();

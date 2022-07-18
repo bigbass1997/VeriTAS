@@ -23,14 +23,14 @@ pub trait SaveLoad: Serialize + DeserializeOwned + Default {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct DumperSection {
     pub rom_directory: PathBuf,
-    pub fceux_path: String,
-    pub bizhawk_path: String,
+    pub fceux_path: PathBuf,
+    pub bizhawk_path: PathBuf,
 }
 impl Default for DumperSection {
     fn default() -> Self { Self {
         rom_directory: PathBuf::from("roms"),
-        fceux_path: "".to_owned(),
-        bizhawk_path: "".to_owned()
+        fceux_path: PathBuf::from(""),
+        bizhawk_path: PathBuf::from(""),
     }}
 }
 

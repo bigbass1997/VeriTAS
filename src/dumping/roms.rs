@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Formatter;
 use std::path::{Path, PathBuf};
 use log::warn;
@@ -100,7 +101,7 @@ mod serde_md5 {
     }
 }
 
-#[derive(Copy, Clone, Deserialize, Serialize)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub enum System {
     Nes,
     N64,
@@ -159,14 +160,14 @@ impl System {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Rom {
-    path: PathBuf,
-    system: System,
+    pub path: PathBuf,
+    pub system: System,
     #[serde(with = "serde_sha1")]
-    sha1: [u8; 20],
+    pub sha1: [u8; 20],
     #[serde(with = "serde_md5")]
-    md5: [u8; 16],
+    pub md5: [u8; 16],
 }
 impl Rom {
     pub fn with_path<P: AsRef<Path>>(path: P) -> Vec<Rom> {
@@ -207,7 +208,7 @@ impl Rom {
 
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct RomCache {
-    pub roms: Vec<Rom>,
+    pub roms: HashSet<Rom>,
 }
 impl SaveLoad for RomCache {}
 impl RomCache {
@@ -221,7 +222,7 @@ impl RomCache {
                 warn!("Expecting a directory of roms, instead got a single file: {}", path.display());
             } else if path.is_dir() {
                 for file in Self::recursive_files(path) {
-                    self.roms.append(&mut Rom::with_path(file));
+                    self.roms.extend(Rom::with_path(file));
                 }
             } else {
                 warn!("Unable to check rom hashes; provided rom directory doesn't exist: {}", path.display());
