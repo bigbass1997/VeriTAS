@@ -17,9 +17,18 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
     // Collect movies from TASVideos
     if let Some(fetches) = matches.values_of_lossy("fetch") {
         for fetch in fetches {
-            movies.push(match Source::parse(fetch) {
-                Some(source) => Movie::with_source(source),
-                None => continue,
+            movies.push(match Source::parse(&fetch) {
+                Some(source) => match Movie::with_source(source.clone()) {
+                    Some(movie) => movie,
+                    None => {
+                        warn!("Skipping unsupported movie format: {}", source);
+                        continue;
+                    }
+                },
+                None => {
+                    warn!("Couldn't recognize movie ID: {}", fetch);
+                    continue;
+                },
             });
         }
     }
@@ -28,7 +37,10 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
     if let Some(local) = matches.value_of("local") {
         let path = PathBuf::from(local);
         if path.is_file() {
-            movies.push(Movie::with_source(Source::Local(path)));
+            match Movie::with_source(Source::Local(path.clone())) {
+                Some(movie) => movies.push(movie),
+                None => warn!("Skipping unsupported movie format: {}", path.display()),
+            }
         }
     }
     

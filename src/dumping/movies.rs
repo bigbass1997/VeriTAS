@@ -8,20 +8,22 @@ use Source::*;
 use crate::dumping::roms::Hash;
 
 
+#[derive(Clone, Debug)]
 pub enum Format {
     Bk2,
     Fm2,
 }
 impl Format {
-    pub fn from_extension<S: AsRef<str>>(ext: S) -> Self {
+    pub fn from_extension<S: AsRef<str>>(ext: S) -> Option<Self> {
         match ext.as_ref().to_lowercase().as_str() {
-            "bk2" => Bk2,
-            "fm2" => Fm2,
-            _ => panic!("Unrecognized movie file extension: {}", ext.as_ref())
+            "bk2" => Some(Bk2),
+            "fm2" => Some(Fm2),
+            _ => None
         }
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum Source {
     Publication(i32),
     Submission(i32),
@@ -56,7 +58,7 @@ pub struct Movie {
     pub source: Source
 }
 impl Movie {
-    pub fn with_source(source: Source) -> Self {
+    pub fn with_source(source: Source) -> Option<Self> {
         match &source {
             Publication(id) => {
                 let zip = tasvideos_api_rs::get_publication_movie(*id).unwrap();
@@ -65,11 +67,13 @@ impl Movie {
                 let path = PathBuf::from(format!("cache/movies/{}.{}", source, ext));
                 std::fs::write(&path, data).unwrap();
                 
-                Self {
-                    path: path.canonicalize().unwrap_or(path),
-                    format: Format::from_extension(ext),
-                    source,
-                }
+                if let Some(format) = Format::from_extension(ext) { 
+                    Some(Self {
+                        path: path.canonicalize().unwrap_or(path),
+                        format,
+                        source,
+                    })
+                } else { None }
             },
             Submission(id) => {
                 let zip = tasvideos_api_rs::get_submission_movie(*id).unwrap();
@@ -78,20 +82,26 @@ impl Movie {
                 let path = PathBuf::from(format!("cache/movies/{}.{}", source, ext));
                 std::fs::write(&path, data).unwrap();
                 
-                Self {
-                    path: path.canonicalize().unwrap_or(path),
-                    format: Format::from_extension(ext),
-                    source,
-                }
+                
+                if let Some(format) = Format::from_extension(ext) { 
+                    Some(Self {
+                        path: path.canonicalize().unwrap_or(path),
+                        format,
+                        source,
+                    })
+                } else { None }
             },
             Local(path) => {
                 let ext = path.extension().unwrap().to_string_lossy();
                 
-                Self {
-                    path: path.to_owned().canonicalize().unwrap_or(path.to_owned()),
-                    format: Format::from_extension(ext),
-                    source,
-                }
+                
+                if let Some(format) = Format::from_extension(ext) { 
+                    Some(Self {
+                        path: path.to_owned().canonicalize().unwrap_or(path.to_owned()),
+                        format,
+                        source,
+                    })
+                } else { None }
             },
         }
     }

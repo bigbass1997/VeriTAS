@@ -187,8 +187,6 @@ impl Rom {
             roms.push(Self {
                 path: path.to_path_buf(),
                 system,
-                //sha1: Sha1::digest(&data).try_into().unwrap(),
-                //md5: Md5::digest(&data).try_into().unwrap(),
                 sha1,
                 md5,
             })
