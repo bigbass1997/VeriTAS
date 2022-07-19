@@ -124,6 +124,7 @@ while true do
         movie.stop()
         handle:close()
         print("Movie dump complete!")
+        client.exit()
         break
     end
     

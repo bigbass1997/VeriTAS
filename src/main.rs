@@ -9,12 +9,6 @@ mod encode;
 mod logger;
 
 fn main() {
-    /*let config = Config::builder()
-        .add_source(File::with_name("veritas-default.toml"))
-        .set_default("rom_directory", "roms").unwrap()
-        .set_default("fceux_path", "").unwrap()
-        .set_default("bizhawk_path", "").unwrap()
-        .build().unwrap();*/
     let mut config = VeritasConfig::load("veritas-default.toml");
     
     std::fs::create_dir("cache").unwrap_or_default();
@@ -22,6 +16,7 @@ fn main() {
     create_missing_file("cache/tasd-api.lua", include_bytes!("includes/tasd-api.lua"));
     create_missing_file("cache/tasd-fceux.lua", include_bytes!("includes/tasd-fceux.lua"));
     create_missing_file("cache/tasd-bizhawk.lua", include_bytes!("includes/tasd-bizhawk.lua"));
+    create_missing_file("cache/config-bizhawk.ini", include_bytes!("includes/config-bizhawk.ini"));
     
     let matches = Command::new("VeriTAS")
         .arg(Arg::new("config")
