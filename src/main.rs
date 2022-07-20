@@ -29,6 +29,7 @@ fn main() {
                 .takes_value(true)
                 .required(true)
                 .multiple_values(true)
+                .allow_invalid_utf8(true)
                 .help("Path(s) to video file(s)."))
             .arg(Arg::new("output")
                 .takes_value(true)
