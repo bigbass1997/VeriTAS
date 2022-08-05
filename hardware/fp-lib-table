@@ -1,0 +1,4 @@
+(fp_lib_table
+  (lib (name "veritas")(type "KiCad")(uri "${KIPRJMOD}/veritas.pretty")(options "")(descr ""))
+  (lib (name "PJRAN1X1U04X")(type "KiCad")(uri "${KIPRJMOD}/PJRAN1X1U04X.pretty")(options "")(descr ""))
+)
