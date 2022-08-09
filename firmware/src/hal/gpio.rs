@@ -1,7 +1,7 @@
 
 #![allow(unused)]
 
-use rp_pico::pac::{IO_BANK0, PADS_BANK0};
+use rp_pico::pac::{IO_BANK0, PADS_BANK0, SIO};
 use rp_pico::pac::io_bank0::gpio::gpio_ctrl::{FUNCSEL_A, FUNCSEL_R};
 use rp_pico::pac::pads_bank0::gpio::{DRIVE_A, DRIVE_R};
 
@@ -115,5 +115,33 @@ pub fn slewrate(gpio: usize) -> bool {
 pub fn set_slewrate(gpio: usize, flag: bool) {
     unsafe {
         (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.slewfast().bit(flag));
+    }
+}
+
+#[inline(always)]
+pub fn is_high(gpio: usize) -> bool {
+    unsafe {
+        (*SIO::ptr()).gpio_in.read().bits() & (1 << gpio) != 0
+    }
+}
+
+#[inline(always)]
+pub fn is_low(gpio: usize) -> bool {
+    unsafe {
+        (*SIO::ptr()).gpio_in.read().bits() & (1 << gpio) == 0
+    }
+}
+
+#[inline(always)]
+pub fn set_high(gpio: usize) {
+    unsafe {
+        (*SIO::ptr()).gpio_out_set.write(|w| w.bits(1 << gpio));
+    }
+}
+
+#[inline(always)]
+pub fn set_low(gpio: usize) {
+    unsafe {
+        (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(1 << gpio));
     }
 }

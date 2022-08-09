@@ -6,23 +6,34 @@ use pio::{InstructionOperands, JmpCondition, SetDestination};
 use rp_pico::hal::gpio::bank0::{Gpio8, Gpio9};
 use rp_pico::hal::gpio::{FunctionUart, Pin};
 use rp_pico::hal::uart::{Enabled, UartPeripheral};
-use rp_pico::pac::UART1;
-use embedded_hal::serial::Read;
-use crate::hal::pio as p;
+use rp_pico::pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
+use crate::hal::{gpio, pio as p};
 use crate::hal::pio::{PioSel, ShiftDirection, SmSel};
 use crate::hal::pio::PioOption::{Autopull, ClockDiv, InBase, InShiftdir, OutBase, OutCount, PullThresh, SetBase, SetCount, WrapBottom, WrapTop};
-use crate::VeritasState;
+use crate::{REPLAY_MODE, ReplayMode, VERITAS_MODE, VeritasMode};
 
 /// Buffered list of controller inputs. 
-pub static mut INPUT_BUFFER: Queue<[u32; 4], 64> = Queue::new();
-
-pub static mut CNT_STATE: u32 = 0;
+pub static mut INPUT_BUFFER: Queue<[u32; 4], 1024> = Queue::new();
 
 static mut READ_BYTE_VECTOR: u8 = 0;
 static mut WRITE_BYTES_VECTOR: u8 = 0;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
+    gpio::set_function(14, FUNCSEL_A::PIO0);
+    gpio::set_pull_down_enable(14, false);
+    gpio::set_pull_up_enable(14, false);
+    
+    gpio::set_function(15, FUNCSEL_A::PIO0);
+    gpio::set_pull_down_enable(15, false);
+    gpio::set_pull_up_enable(15, false);
+    
+    gpio::set_function(16, FUNCSEL_A::SIO);
+    gpio::set_pull_down_enable(16, false);
+    gpio::set_pull_up_enable(16, false);
+    gpio::set_input_enable(16, true);
+    gpio::set_output_disable(16, true);
+    
     let program = { pio_asm!("
         .origin 0
     	.wrap_target
@@ -93,53 +104,41 @@ pub fn initialize() {
     ];
     p::configure(PioSel::Zero, SmSel::Zero, &options);
     p::exec(PioSel::Zero, SmSel::Zero, InstructionOperands::SET { destination: SetDestination::PINDIRS, data: 0b10 }); // init input
+    p::start(PioSel::Zero, SmSel::Zero);
 }
 
-pub fn run(delay: &mut Delay, uart: &mut UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<Gpio9, FunctionUart>)>) {
+pub fn run(delay: &mut Delay) {
     unsafe {
-        crate::VERITAS_STATE = VeritasState::Replay;
+        initialize();
         
-        while crate::VERITAS_STATE == VeritasState::Replay {
-            let mut ptr = 3;
-            loop {
-                let cmd = read_blocking();
-                match cmd {
-                    0xFF | 0x01 => {
-                        delay.delay_us(4);
-                        write_blocking(&CNT_STATE.to_be_bytes());
-                        info!("{:08X}", CNT_STATE);
-                        delay.delay_us(16);
-                    },
-                    0x00 => {
-                        delay.delay_us(4);
-                        write_blocking(&[0x05, 0x00, 0x02]);
-                        delay.delay_us(16);
-                    },
-                    0x02 | 0x03 => {
-                        delay.delay_us(150);
-                    }
-                    _ => ()
+        info!("starting N64..");
+        
+        while gpio::is_low(16) {}
+        delay.delay_ms(100);
+        
+        while VERITAS_MODE == VeritasMode::Replay {
+            let cmd = read_blocking();
+            match cmd {
+                0xFF | 0x01 => {
+                    //delay.delay_us(4);
+                    let state = INPUT_BUFFER.dequeue().unwrap_or_default();
+                    write_blocking(&state[0].to_be_bytes());
+                    //info!("{:08X}", CNT_STATE);
+                    delay.delay_us(16);
+                },
+                0x00 => {
+                    //delay.delay_us(4);
+                    write_blocking(&[0x05, 0x00, 0x02]);
+                    delay.delay_us(16);
+                },
+                0x02 | 0x03 => {
+                    delay.delay_us(150);
                 }
-                
-                // TEMPORARY // To be replaced with UART handler in separate thread, via static INPUT_BUFFER
-                let mut frame_break = 0;
-                while let Ok(data) = uart.read() {
-                    CNT_STATE &= !(0xFF << (ptr * 8));
-                    CNT_STATE |= (data as u32) << (ptr * 8);
-                    
-                    if ptr == 0 {
-                        ptr = 3;
-                    } else {
-                        ptr -= 1;
-                    }
-                    
-                    frame_break += 1;
-                    if frame_break == 4 {
-                        break;
-                    }
-                }
+                _ => ()
             }
         }
+        
+        REPLAY_MODE = ReplayMode::None;
     }
 }
 
