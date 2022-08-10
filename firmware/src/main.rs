@@ -3,11 +3,9 @@
 #![no_std]
 #![no_main]
 
-use cortex_m::asm::nop;
 use defmt::info;
 use embedded_time::rate::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::InputPin;
 use panic_probe as _;
 
 use rp_pico::hal::{clocks::Clock, pac, sio::Sio, watchdog::Watchdog};
@@ -20,11 +18,9 @@ use rp_pico::hal::pll::{PLLConfig, setup_pll_blocking};
 use rp_pico::hal::pll::common_configs::{PLL_USB_48MHZ};
 use rp_pico::hal::xosc::setup_xosc_blocking;
 use rp_pico::hal::uart::{Enabled, UartConfig, UartPeripheral};
-use rp_pico::pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
-use rp_pico::pac::PIO0;
-use crate::hal::pio::{PioSel, SmSel};
 
 mod hal;
+mod replaycore;
 mod systems;
 mod utilcore;
 
@@ -36,25 +32,6 @@ pub const PLL_SYS_160MHZ: PLLConfig<Megahertz> = PLLConfig {
 };
 
 static mut CORE1_STACK: Stack<16384> = Stack::new();
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum VeritasMode {
-    Initial,
-    Idle,
-    Replay,
-}
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-pub enum ReplayMode {
-    None,
-    N64,
-    Nes,
-    A2600,
-    Genesis,
-}
-
-pub static mut VERITAS_MODE: VeritasMode = VeritasMode::Initial;
-pub static mut REPLAY_MODE: ReplayMode = ReplayMode::None;
 
 
 #[export_name = "main"]
@@ -105,21 +82,5 @@ pub unsafe extern "C" fn main() -> ! {
     let core1 = &mut cores[1];
     let _ = core1.spawn(unsafe { &mut CORE1_STACK.mem }, move || { utilcore::run(uart) }).unwrap();
     
-    loop {
-        match VERITAS_MODE {
-            VeritasMode::Initial => {
-                VERITAS_MODE = VeritasMode::Idle;
-                info!("VeriTAS Ready!");
-            },
-            VeritasMode::Idle => nop(),
-            VeritasMode::Replay => match REPLAY_MODE {
-                ReplayMode::None => (),
-                ReplayMode::N64 => systems::n64::run(&mut delay),
-                ReplayMode::Nes => (),
-                ReplayMode::A2600 => (),
-                ReplayMode::Genesis => (),
-            },
-        }
-        nop();
-    }
+    replaycore::run(delay);
 }

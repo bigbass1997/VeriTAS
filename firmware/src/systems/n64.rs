@@ -3,14 +3,11 @@ use defmt::info;
 use heapless::spsc::Queue;
 use pio_proc::pio_asm;
 use pio::{InstructionOperands, JmpCondition, SetDestination};
-use rp_pico::hal::gpio::bank0::{Gpio8, Gpio9};
-use rp_pico::hal::gpio::{FunctionUart, Pin};
-use rp_pico::hal::uart::{Enabled, UartPeripheral};
 use rp_pico::pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
 use crate::hal::{gpio, pio as p};
 use crate::hal::pio::{PioSel, ShiftDirection, SmSel};
 use crate::hal::pio::PioOption::{Autopull, ClockDiv, InBase, InShiftdir, OutBase, OutCount, PullThresh, SetBase, SetCount, WrapBottom, WrapTop};
-use crate::{REPLAY_MODE, ReplayMode, VERITAS_MODE, VeritasMode};
+use crate::replaycore::{VERITAS_MODE, VeritasMode};
 
 /// Buffered list of controller inputs. 
 pub static mut INPUT_BUFFER: Queue<[u32; 4], 1024> = Queue::new();
@@ -111,12 +108,12 @@ pub fn run(delay: &mut Delay) {
     unsafe {
         initialize();
         
-        info!("starting N64..");
+        info!("starting N64 replay..");
         
         while gpio::is_low(16) {}
         delay.delay_ms(100);
         
-        while VERITAS_MODE == VeritasMode::Replay {
+        while VERITAS_MODE == VeritasMode::ReplayN64 {
             let cmd = read_blocking();
             match cmd {
                 0xFF | 0x01 => {
@@ -137,8 +134,6 @@ pub fn run(delay: &mut Delay) {
                 _ => ()
             }
         }
-        
-        REPLAY_MODE = ReplayMode::None;
     }
 }
 

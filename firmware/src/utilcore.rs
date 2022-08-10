@@ -1,5 +1,6 @@
-use crate::{Enabled, FunctionUart, Gpio8, Gpio9, info, Pin, REPLAY_MODE, ReplayMode, UartPeripheral, VERITAS_MODE, VeritasMode};
+use crate::{Enabled, FunctionUart, Gpio8, Gpio9, info, Pin, UartPeripheral};
 use crate::pac::UART1;
+use crate::replaycore::{VERITAS_MODE, VeritasMode};
 
 pub enum Command {
     
@@ -28,8 +29,7 @@ pub fn run(uart: UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<G
                         }
                     },
                     0x02 => {
-                        REPLAY_MODE = ReplayMode::N64;
-                        VERITAS_MODE = VeritasMode::Replay;
+                        VERITAS_MODE = VeritasMode::ReplayN64;
                         uart.write_full_blocking(&[0x20]);
                         info!("0x02 received");
                     },

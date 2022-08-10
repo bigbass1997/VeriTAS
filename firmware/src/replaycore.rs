@@ -1,0 +1,37 @@
+use cortex_m::asm::nop;
+use cortex_m::delay::Delay;
+use crate::{info, systems};
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum VeritasMode {
+    Initial,
+    Idle,
+    ReplayN64,
+    ReplayNes,
+    ReplayA2600,
+    ReplayGenesis,
+}
+use VeritasMode::*;
+
+pub static mut VERITAS_MODE: VeritasMode = Initial;
+
+
+pub fn run(mut delay: Delay) -> ! {
+    unsafe {
+        VERITAS_MODE = Idle;
+        info!("VeriTAS Ready!");
+        
+        loop {
+            match VERITAS_MODE {
+                Initial => nop(),
+                Idle => nop(),
+                ReplayN64 => systems::n64::run(&mut delay),
+                ReplayNes => nop(),
+                ReplayA2600 => nop(),
+                ReplayGenesis => nop(),
+            }
+            
+            nop();
+        }
+    }
+}
