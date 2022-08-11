@@ -120,7 +120,6 @@ pub fn run(delay: &mut Delay) {
                     //delay.delay_us(4);
                     let state = INPUT_BUFFER.dequeue().unwrap_or_default();
                     write_blocking(&state[0].to_be_bytes());
-                    //info!("{:08X}", CNT_STATE);
                     delay.delay_us(16);
                 },
                 0x00 => {

@@ -1,7 +1,10 @@
 
 #![allow(unused_unsafe)]
+#![feature(alloc_error_handler)]
 #![no_std]
 #![no_main]
+
+extern crate alloc;
 
 use defmt::info;
 use embedded_time::rate::*;
@@ -18,7 +21,9 @@ use rp_pico::hal::pll::{PLLConfig, setup_pll_blocking};
 use rp_pico::hal::pll::common_configs::{PLL_USB_48MHZ};
 use rp_pico::hal::xosc::setup_xosc_blocking;
 use rp_pico::hal::uart::{Enabled, UartConfig, UartPeripheral};
+use crate::allocator::ALLOCATOR;
 
+mod allocator;
 mod hal;
 mod replaycore;
 mod systems;
@@ -36,6 +41,13 @@ static mut CORE1_STACK: Stack<16384> = Stack::new();
 
 #[export_name = "main"]
 pub unsafe extern "C" fn main() -> ! {
+    {
+        use core::mem::MaybeUninit;
+        const HEAP_SIZE: usize = 16384;
+        static mut HEAP: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+        unsafe { ALLOCATOR.init(HEAP.as_ptr() as usize, HEAP_SIZE) }
+    }
+    
     let mut pac = pac::Peripherals::take().unwrap();
     
     let mut watchdog = Watchdog::new(pac.WATCHDOG);

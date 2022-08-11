@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use cortex_m::asm::nop;
 use cortex_m::delay::Delay;
 use crate::{info, systems};
@@ -15,6 +16,15 @@ use VeritasMode::*;
 
 pub static mut VERITAS_MODE: VeritasMode = Initial;
 
+pub enum Transition {
+    SoftReset,
+    HardReset,
+}
+
+pub struct ReplayConfig {
+    pub index_len: u32,
+    pub transitions: Vec<(u32, Transition)>,
+}
 
 pub fn run(mut delay: Delay) -> ! {
     unsafe {
