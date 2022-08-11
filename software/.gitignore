@@ -1,0 +1,7 @@
+/target/
+/out/
+/.idea/
+/*iml
+/cache/
+/veritas-default.toml
+/*.tasd
