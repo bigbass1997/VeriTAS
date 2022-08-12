@@ -31,7 +31,7 @@ pub fn handle(matches: &ArgMatches) {
         device
     }.unwrap();
     
-    let version = u32::from_be_bytes((&movie[4..8]).try_into().unwrap());
+    /*let version = u32::from_be_bytes((&movie[4..8]).try_into().unwrap());
     let start = if version == 1 || version == 2 { 0x200 } else { 0x400 };
     let controllers = movie[0x15] as usize;
     
@@ -74,6 +74,32 @@ pub fn handle(matches: &ArgMatches) {
             std::thread::sleep(Duration::from_secs(1));
         }
         if ptr == inputs.len() {
+            break;
+        }
+    }*/
+    
+    device.clear(ClearBuffer::All).unwrap_or_default();
+    device.write_all(&[0x04]).unwrap();
+    let mut buf = [0u8];
+    device.read_exact(&mut buf).unwrap();
+    if buf[0] != 0x40 {
+        error!("Unexpected value returned: {:#04X}", buf[0]);
+        return;
+    }
+    info!("Starting");
+    
+    let mut ptr = 0usize;
+    loop {
+        device.write_all(&[0x03, !movie[ptr], !movie[ptr + 1]]).unwrap();
+        let mut buf = [0u8];
+        device.read_exact(&mut buf).unwrap();
+        
+        if buf[0] == 0x03 {
+            ptr += 2;
+        } else {
+            std::thread::sleep(Duration::from_secs(1));
+        }
+        if ptr == movie.len() {
             break;
         }
     }

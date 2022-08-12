@@ -11,7 +11,6 @@ use defmt::info;
 use defmt_rtt as _;
 use panic_probe as _;
 use embedded_time::rate::*;
-use embedded_hal::watchdog::WatchdogDisable;
 use rp2040_hal::clocks::{Clock, ClocksManager, ClockSource};
 use rp2040_hal::gpio::pin::bank0::Pins;
 use rp2040_hal::gpio::FunctionUart;
@@ -62,7 +61,7 @@ pub unsafe extern "C" fn main() -> ! {
     VTABLE0.activate(&mut pac.PPB);
     
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    watchdog.disable();
+    //watchdog.disable();
     
     let mut clocks = ClocksManager::new(pac.CLOCKS);
     let xosc = setup_xosc_blocking(pac.XOSC, 12000000.Hz()).ok().unwrap();
@@ -74,6 +73,7 @@ pub unsafe extern "C" fn main() -> ! {
     clocks.adc_clock.configure_clock(&pll_usb, pll_usb.get_freq()).ok().unwrap();
     clocks.rtc_clock.configure_clock(&pll_usb, 46875u32.Hz()).ok().unwrap();
     clocks.peripheral_clock.configure_clock(&clocks.system_clock, clocks.system_clock.freq()).ok().unwrap();
+    watchdog.enable_tick_generation(12);
     
     let core = CorePeripherals::take().unwrap();
     let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
@@ -86,7 +86,7 @@ pub unsafe extern "C" fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    
+    //pins.gpio13.into_push_pull_output();
     let uart_pins = (
         pins.gpio8.into_mode::<FunctionUart>(),
         pins.gpio9.into_mode::<FunctionUart>(),

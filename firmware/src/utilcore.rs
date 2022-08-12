@@ -45,7 +45,22 @@ pub fn run(uart: UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<G
                     0x02 => {
                         VERITAS_MODE = VeritasMode::ReplayN64;
                         uart.write_full_blocking(&[0x20]);
-                        info!("0x02 received");
+                    },
+                    0x03 => {
+                        use crate::systems::nes::INPUT_BUFFER;
+                        
+                        let mut input = [0u8; 2];
+                        uart.read_full_blocking(&mut input).unwrap_or_default();
+                        if !INPUT_BUFFER.is_full() {
+                            INPUT_BUFFER.enqueue(input).unwrap();
+                            uart.write_full_blocking(&[0x03]);
+                        } else {
+                            uart.write_full_blocking(&[0xFF]);
+                        }
+                    },
+                    0x04 => {
+                        VERITAS_MODE = VeritasMode::ReplayNes;
+                        uart.write_full_blocking(&[0x40]);
                     },
                     0xFE => {
                         info!("ping");
