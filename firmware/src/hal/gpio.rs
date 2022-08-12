@@ -37,7 +37,7 @@ pub fn set_output_disable(gpio: usize, flag: bool) {
 #[inline(always)]
 pub fn sio_output_enable(gpio: usize) -> bool {
     unsafe {
-        (*SIO::ptr()).gpio_out.read().bits() & (1 << gpio) != 0
+        (*SIO::ptr()).gpio_oe.read().bits() & (1 << gpio) != 0
     }
 }
 
@@ -45,9 +45,9 @@ pub fn sio_output_enable(gpio: usize) -> bool {
 pub fn set_sio_output_enable(gpio: usize, flag: bool) {
     unsafe {
         if flag {
-            (*SIO::ptr()).gpio_out_set.write(|w| w.bits(1 << gpio));
+            (*SIO::ptr()).gpio_oe_set.write(|w| w.bits(1 << gpio));
         } else {
-            (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(1 << gpio));
+            (*SIO::ptr()).gpio_oe_clr.write(|w| w.bits(1 << gpio));
         }
     }
 }
