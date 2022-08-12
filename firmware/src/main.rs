@@ -65,7 +65,7 @@ pub unsafe extern "C" fn main() -> ! {
     clocks.peripheral_clock.configure_clock(&clocks.system_clock, clocks.system_clock.freq()).ok().unwrap();
     
     let core = pac::CorePeripherals::take().unwrap();
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     
     let mut sio = Sio::new(pac.SIO);
     

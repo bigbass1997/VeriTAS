@@ -17,14 +17,17 @@ static mut WRITE_BYTES_VECTOR: u8 = 0;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
+    // Data
     gpio::set_function(14, FUNCSEL_A::PIO0);
     gpio::set_pull_down_enable(14, false);
     gpio::set_pull_up_enable(14, false);
     
+    // Debug
     gpio::set_function(15, FUNCSEL_A::PIO0);
     gpio::set_pull_down_enable(15, false);
     gpio::set_pull_up_enable(15, false);
     
+    // Detect
     gpio::set_function(16, FUNCSEL_A::SIO);
     gpio::set_pull_down_enable(16, false);
     gpio::set_pull_up_enable(16, false);

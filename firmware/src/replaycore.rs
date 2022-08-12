@@ -30,13 +30,14 @@ pub fn run(mut delay: Delay) -> ! {
     unsafe {
         VERITAS_MODE = Idle;
         info!("VeriTAS Ready!");
+        VERITAS_MODE = ReplayNes;
         
         loop {
             match VERITAS_MODE {
                 Initial => nop(),
                 Idle => nop(),
                 ReplayN64 => systems::n64::run(&mut delay),
-                ReplayNes => nop(),
+                ReplayNes => systems::nes::run(&mut delay),
                 ReplayA2600 => nop(),
                 ReplayGenesis => nop(),
             }

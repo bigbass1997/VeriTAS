@@ -16,7 +16,7 @@ pub fn function(gpio: usize) -> FUNCSEL_R {
 #[inline(always)]
 pub fn set_function(gpio: usize, func: FUNCSEL_A) {
     unsafe {
-        (*IO_BANK0::ptr()).gpio[gpio].gpio_ctrl.write(|w| w.funcsel().variant(func));
+        (*IO_BANK0::ptr()).gpio[gpio].gpio_ctrl.modify(|_, w| w.funcsel().variant(func));
     }
 }
 
@@ -30,7 +30,25 @@ pub fn output_disable(gpio: usize) -> bool {
 #[inline(always)]
 pub fn set_output_disable(gpio: usize, flag: bool) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.od().bit(flag));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.od().bit(flag));
+    }
+}
+
+#[inline(always)]
+pub fn sio_output_enable(gpio: usize) -> bool {
+    unsafe {
+        (*SIO::ptr()).gpio_out.read().bits() & (1 << gpio) != 0
+    }
+}
+
+#[inline(always)]
+pub fn set_sio_output_enable(gpio: usize, flag: bool) {
+    unsafe {
+        if flag {
+            (*SIO::ptr()).gpio_out_set.write(|w| w.bits(1 << gpio));
+        } else {
+            (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(1 << gpio));
+        }
     }
 }
 
@@ -44,7 +62,7 @@ pub fn input_enable(gpio: usize) -> bool {
 #[inline(always)]
 pub fn set_input_enable(gpio: usize, flag: bool) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.ie().bit(flag));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.ie().bit(flag));
     }
 }
 
@@ -58,7 +76,7 @@ pub fn drive(gpio: usize) -> DRIVE_R {
 #[inline(always)]
 pub fn set_drive(gpio: usize, drive: DRIVE_A) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.drive().variant(drive));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.drive().variant(drive));
     }
 }
 
@@ -72,7 +90,7 @@ pub fn pull_up_enable(gpio: usize) -> bool {
 #[inline(always)]
 pub fn set_pull_up_enable(gpio: usize, flag: bool) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.pue().bit(flag));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.pue().bit(flag));
     }
 }
 
@@ -86,7 +104,7 @@ pub fn pull_down_enable(gpio: usize) -> bool {
 #[inline(always)]
 pub fn set_pull_down_enable(gpio: usize, flag: bool) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.pde().bit(flag));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.pde().bit(flag));
     }
 }
 
@@ -100,7 +118,7 @@ pub fn schmitt_enable(gpio: usize) -> bool {
 #[inline(always)]
 pub fn set_schmitt_enable(gpio: usize, flag: bool) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.schmitt().bit(flag));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.schmitt().bit(flag));
     }
 }
 
@@ -114,7 +132,7 @@ pub fn slewrate(gpio: usize) -> bool {
 #[inline(always)]
 pub fn set_slewrate(gpio: usize, flag: bool) {
     unsafe {
-        (*PADS_BANK0::ptr()).gpio[gpio].write(|w| w.slewfast().bit(flag));
+        (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.slewfast().bit(flag));
     }
 }
 
