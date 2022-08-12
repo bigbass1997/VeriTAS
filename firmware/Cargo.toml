@@ -16,7 +16,7 @@ panic-probe = { version = "0.3", features = ["print-defmt"] }
 
 #rp-pico = "0.4"
 rp2040-pac = "0.3"
-rp2040-hal = "0.5"
+rp2040-hal = { git = "https://github.com/rp-rs/rp-hal" }
 rp2040-boot2 = "0.2"
 pio = "0.2"
 pio-proc = "0.2"

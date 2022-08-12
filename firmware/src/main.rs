@@ -21,6 +21,7 @@ use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
 use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::uart::{UartConfig, UartPeripheral};
 use rp2040_hal::{Sio, Watchdog};
+use rp2040_hal::vector_table::VectorTable;
 use rp2040_pac::{CorePeripherals, Peripherals};
 use crate::allocator::ALLOCATOR;
 
@@ -43,6 +44,8 @@ const PLL_SYS_160MHZ: PLLConfig<Megahertz> = PLLConfig {
 
 static mut CORE1_STACK: Stack<16384> = Stack::new();
 
+/// Do not use outside of CORE0!
+pub static mut VTABLE0: VectorTable = VectorTable::new();
 
 #[export_name = "main"]
 pub unsafe extern "C" fn main() -> ! {
@@ -53,9 +56,10 @@ pub unsafe extern "C" fn main() -> ! {
         unsafe { ALLOCATOR.init(HEAP.as_ptr() as usize, HEAP_SIZE) }
     }
     
-    
-    
     let mut pac = Peripherals::take().unwrap();
+    
+    VTABLE0.init(&mut pac.PPB);
+    VTABLE0.activate(&mut pac.PPB);
     
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     watchdog.disable();
