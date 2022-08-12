@@ -5,22 +5,23 @@
 #![no_main]
 
 extern crate alloc;
+extern crate cortex_m_rt;
 
 use defmt::info;
-use embedded_time::rate::*;
 use defmt_rtt as _;
 use panic_probe as _;
-
-use rp_pico::hal::{clocks::Clock, pac, sio::Sio, watchdog::Watchdog};
+use embedded_time::rate::*;
 use embedded_hal::watchdog::WatchdogDisable;
-use rp_pico::hal::clocks::{ClocksManager, ClockSource};
-use rp_pico::hal::gpio::bank0::{Gpio8, Gpio9};
-use rp_pico::hal::gpio::{FunctionUart, Pin};
-use rp_pico::hal::multicore::{Multicore, Stack};
-use rp_pico::hal::pll::{PLLConfig, setup_pll_blocking};
-use rp_pico::hal::pll::common_configs::{PLL_USB_48MHZ};
-use rp_pico::hal::xosc::setup_xosc_blocking;
-use rp_pico::hal::uart::{Enabled, UartConfig, UartPeripheral};
+use rp2040_hal::clocks::{Clock, ClocksManager, ClockSource};
+use rp2040_hal::gpio::pin::bank0::Pins;
+use rp2040_hal::gpio::FunctionUart;
+use rp2040_hal::multicore::{Multicore, Stack};
+use rp2040_hal::pll::{PLLConfig, setup_pll_blocking};
+use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
+use rp2040_hal::xosc::setup_xosc_blocking;
+use rp2040_hal::uart::{UartConfig, UartPeripheral};
+use rp2040_hal::{Sio, Watchdog};
+use rp2040_pac::{CorePeripherals, Peripherals};
 use crate::allocator::ALLOCATOR;
 
 mod allocator;
@@ -29,7 +30,11 @@ mod replaycore;
 mod systems;
 mod utilcore;
 
-pub const PLL_SYS_160MHZ: PLLConfig<Megahertz> = PLLConfig {
+#[link_section = ".boot2"]
+#[used]
+pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
+
+const PLL_SYS_160MHZ: PLLConfig<Megahertz> = PLLConfig {
         vco_freq: Megahertz(1440),
         refdiv: 1,
         post_div1: 3,
@@ -48,7 +53,9 @@ pub unsafe extern "C" fn main() -> ! {
         unsafe { ALLOCATOR.init(HEAP.as_ptr() as usize, HEAP_SIZE) }
     }
     
-    let mut pac = pac::Peripherals::take().unwrap();
+    
+    
+    let mut pac = Peripherals::take().unwrap();
     
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     watchdog.disable();
@@ -64,12 +71,12 @@ pub unsafe extern "C" fn main() -> ! {
     clocks.rtc_clock.configure_clock(&pll_usb, 46875u32.Hz()).ok().unwrap();
     clocks.peripheral_clock.configure_clock(&clocks.system_clock, clocks.system_clock.freq()).ok().unwrap();
     
-    let core = pac::CorePeripherals::take().unwrap();
+    let core = CorePeripherals::take().unwrap();
     let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
     
     let mut sio = Sio::new(pac.SIO);
     
-    let pins = rp_pico::Pins::new(
+    let pins = Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,

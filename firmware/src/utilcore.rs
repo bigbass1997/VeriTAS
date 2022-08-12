@@ -1,5 +1,9 @@
-use crate::{Enabled, FunctionUart, Gpio8, Gpio9, info, Pin, UartPeripheral};
-use crate::pac::UART1;
+use defmt::info;
+use rp2040_hal::gpio::pin::FunctionUart;
+use rp2040_hal::gpio::pin::bank0::{Gpio8, Gpio9};
+use rp2040_hal::gpio::Pin;
+use rp2040_hal::uart::{Enabled, UartPeripheral};
+use rp2040_pac::UART1;
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
 
 pub enum Command {

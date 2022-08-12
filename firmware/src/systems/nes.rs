@@ -1,10 +1,9 @@
-use core::arch::asm;
 use cortex_m::asm::nop;
 use cortex_m::delay::Delay;
 use defmt::info;
 use heapless::spsc::Queue;
-use rp_pico::pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
-use rp_pico::pac::{IO_BANK0, PADS_BANK0, SIO};
+use rp2040_pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
+use rp2040_pac::SIO;
 use crate::hal::gpio;
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
 

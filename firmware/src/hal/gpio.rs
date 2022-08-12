@@ -1,9 +1,9 @@
 
 #![allow(unused)]
 
-use rp_pico::pac::{IO_BANK0, PADS_BANK0, SIO};
-use rp_pico::pac::io_bank0::gpio::gpio_ctrl::{FUNCSEL_A, FUNCSEL_R};
-use rp_pico::pac::pads_bank0::gpio::{DRIVE_A, DRIVE_R};
+use rp2040_pac::{IO_BANK0, PADS_BANK0, SIO};
+use rp2040_pac::io_bank0::gpio::gpio_ctrl::{FUNCSEL_A, FUNCSEL_R};
+use rp2040_pac::pads_bank0::gpio::{DRIVE_A, DRIVE_R};
 
 
 #[inline(always)]

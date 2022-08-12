@@ -1,5 +1,4 @@
 use core::alloc::Layout;
-use core::panic::PanicInfo;
 use alloc_cortex_m::CortexMHeap;
 
 #[global_allocator]

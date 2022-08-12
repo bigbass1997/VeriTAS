@@ -1,8 +1,6 @@
-use defmt::info;
 use pio::{InstructionOperands, Program, RP2040_MAX_PROGRAM_SIZE};
-use rp_pico::pac::{PIO0, PIO1};
+use rp2040_pac::{PIO0, PIO1};
 use num_enum::IntoPrimitive;
-use rp_pico::pac::pio0::SM;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone,)]
 pub enum PioSel {

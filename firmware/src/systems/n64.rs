@@ -3,7 +3,7 @@ use defmt::info;
 use heapless::spsc::Queue;
 use pio_proc::pio_asm;
 use pio::{InstructionOperands, JmpCondition, SetDestination};
-use rp_pico::pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
+use rp2040_pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
 use crate::hal::{gpio, pio as p};
 use crate::hal::pio::{PioSel, ShiftDirection, SmSel};
 use crate::hal::pio::PioOption::{Autopull, ClockDiv, InBase, InShiftdir, OutBase, OutCount, PullThresh, SetBase, SetCount, WrapBottom, WrapTop};
