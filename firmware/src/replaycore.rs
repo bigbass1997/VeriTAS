@@ -30,7 +30,6 @@ pub fn run(mut delay: Delay) -> ! {
     unsafe {
         VERITAS_MODE = Idle;
         info!("VeriTAS Ready!");
-        //VERITAS_MODE = ReplayNes;
         
         loop {
             match VERITAS_MODE {

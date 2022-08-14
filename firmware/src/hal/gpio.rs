@@ -130,6 +130,27 @@ pub fn slewrate(gpio: usize) -> bool {
 }
 
 #[inline(always)]
+pub fn set_as_input(gpio: usize, pull_up: bool, pull_down: bool) {
+    set_function(gpio, FUNCSEL_A::SIO);
+    set_pull_down_enable(gpio, pull_down);
+    set_pull_up_enable(gpio, pull_up);
+    set_output_disable(gpio, true);
+    set_input_enable(gpio, true);
+    set_sio_output_enable(gpio, false);
+}
+
+#[inline(always)]
+pub fn set_as_output(gpio: usize, pull_up: bool, pull_down: bool) {
+    set_function(gpio, FUNCSEL_A::SIO);
+    set_pull_down_enable(gpio, pull_down);
+    set_pull_up_enable(gpio, pull_up);
+    set_output_disable(gpio, false);
+    set_input_enable(gpio, false);
+    set_sio_output_enable(gpio, true);
+    set_function(gpio, FUNCSEL_A::SIO);
+}
+
+#[inline(always)]
 pub fn set_slewrate(gpio: usize, flag: bool) {
     unsafe {
         (*PADS_BANK0::ptr()).gpio[gpio].modify(|_, w| w.slewfast().bit(flag));

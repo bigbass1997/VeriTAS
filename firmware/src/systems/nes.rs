@@ -3,7 +3,6 @@ use cortex_m::delay::Delay;
 use defmt::info;
 use heapless::spsc::Queue;
 use rp2040_pac::Interrupt::IO_IRQ_BANK0;
-use rp2040_pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
 use rp2040_pac::{IO_BANK0, PPB, SIO, TIMER};
 use crate::hal::gpio;
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
@@ -18,79 +17,64 @@ static mut OVERREAD: u8 = 1;
 static mut LAST_LATCH: u64 = 0;
 static mut LATCHED_INPUT: [u8; 2] = [0xFF, 0xFF];
 static mut WORKING_INPUT: [u8; 2] = [0xFF, 0xFF];
-//static mut READ_BYTE_VECTOR: u8 = 0;
-//static mut WRITE_BYTES_VECTOR: u8 = 0;
 
-const SER_PIN: usize = 14;
+const SER: [usize; 2] = [14, 17];
+const CLK: [usize; 2] = [15, 18];
+const LAT: usize = 16;
+const RST: usize = 13;
+
+const DEBUG: usize = 12;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
-    // Reset
-    gpio::set_pull_down_enable(13, true);
-    gpio::set_pull_up_enable(13, false);
-    gpio::set_output_disable(13, false);
-    gpio::set_input_enable(13, false);
-    gpio::set_sio_output_enable(13, true);
-    gpio::set_function(13, FUNCSEL_A::SIO);
-    gpio::set_low(13);
+    gpio::set_as_output(DEBUG, false, false); // Debug
+    gpio::set_high(DEBUG);
     
-    // Data
-    gpio::set_pull_down_enable(SER_PIN, false);
-    gpio::set_pull_up_enable(SER_PIN, false);
-    gpio::set_output_disable(SER_PIN, false);
-    gpio::set_input_enable(SER_PIN, false);
-    gpio::set_sio_output_enable(SER_PIN, true);
-    gpio::set_function(SER_PIN, FUNCSEL_A::SIO);
-    gpio::set_high(SER_PIN);
+    for pin in SER { // Player 1 and 2 serial
+        gpio::set_as_output(pin, false, false);
+        gpio::set_high(pin);
+    }
     
-    // Clock
-    gpio::set_function(15, FUNCSEL_A::SIO);
-    gpio::set_pull_down_enable(15, false);
-    gpio::set_pull_up_enable(15, false);
-    gpio::set_output_disable(15, true);
-    gpio::set_input_enable(15, true);
-    gpio::set_sio_output_enable(15, false);
+    for pin in CLK { // Player 1 and 2 clock
+        gpio::set_as_input(pin, false, false);
+    }
     
-    // Latch
-    gpio::set_function(16, FUNCSEL_A::SIO);
-    gpio::set_pull_down_enable(16, false);
-    gpio::set_pull_up_enable(16, false);
-    gpio::set_output_disable(16, true);
-    gpio::set_input_enable(16, true);
-    gpio::set_sio_output_enable(16, false);
+    gpio::set_as_input(LAT, false, false); // Shared latch
     
-    gpio::set_high(13);
-    
+    gpio::set_as_output(RST, false, true); // Console reset (active-high)
+    gpio::set_low(RST);
+}
+
+fn enable_interrupts() {
     unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
         
-        (*IO_BANK0::ptr()).proc0_inte[2].modify(|_, w| w.gpio0_edge_high().bit(true));
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio7_edge_low().bit(true));
+        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio7_edge_low().bit(true));
+        (*IO_BANK0::ptr()).intr[2].write(|w| w.gpio2_edge_low().bit(true));
+        (*IO_BANK0::ptr()).intr[2].write(|w| w.gpio0_edge_high().bit(true));
+        
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio7_edge_low().bit(true)); // CLK[0]
+        (*IO_BANK0::ptr()).proc0_inte[2].modify(|_, w| w.gpio2_edge_low().bit(true)); // CLK[1]
+        (*IO_BANK0::ptr()).proc0_inte[2].modify(|_, w| w.gpio0_edge_high().bit(true)); // LAT
         (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)))
     }
 }
 
 
-pub fn run(delay: &mut Delay) {
+pub fn run(_delay: &mut Delay) {
     unsafe {
         initialize();
         
+        gpio::set_high(RST);
         info!("starting NES replay..");
         info!("state: {:#010X}", (*SIO::ptr()).gpio_out.read().bits());
-        gpio::set_low(13);
+        gpio::set_low(RST);
+        
+        while gpio::is_high(LAT) { nop(); }
+        
+        enable_interrupts();
         
         while VERITAS_MODE == VeritasMode::ReplayNes {
-            //while gpio::is_low(16) { nop() }
-            //gpio::set_low(SER_PIN);
-            //delay.delay_us(100);
-            //gpio::set_high(SER_PIN);
-            
-            /*for _ in 0..8 {
-                while gpio::is_high(15) { nop() }
-                gpio::set_low(14);
-                delay.delay_us(1);
-                gpio::set_high(14);
-            }*/
             nop()
         }
     }
@@ -99,25 +83,23 @@ pub fn run(delay: &mut Delay) {
 #[inline(always)]
 unsafe fn latch() {
     let timer = &*TIMER::ptr();
-    
     let time = (timer.timelr.read().bits() as u64) | ((timer.timehr.read().bits() as u64) << 32);
-    if LAST_LATCH + (LATCH_FILTER_US as u64) < time { // load next input
-        //info!("{}", time - LAST_LATCH);
+    
+    if LAST_LATCH + (LATCH_FILTER_US as u64) < time { // if latch filter expired, load next input
         LAST_LATCH = time;
         
         LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or_else(|| [0xFF, 0xFF]);
-        /*gpio::set_low(SER_PIN);
-        delay(10);
-        gpio::set_high(SER_PIN);*/
     }
     
     WORKING_INPUT = LATCHED_INPUT;
     
-    // TODO: Support 2 controllers
-    if WORKING_INPUT[0] & 0x80 != 0 {
-        gpio::set_high(SER_PIN);
-    } else {
-        gpio::set_low(SER_PIN);
+    // set first bit's state
+    for i in 0..2 {
+        if WORKING_INPUT[i] & 0x80 != 0 {
+            gpio::set_high(SER[i]);
+        } else {
+            gpio::set_low(SER[i]);
+        }
     }
 }
 
@@ -128,25 +110,28 @@ unsafe fn clock(cnt: usize) {
     
     delay(320); // CLOCK FILTER
     
-    // TODO: Support 2 controllers (place pin numbers in [usize; 2] for indexing)
     if WORKING_INPUT[cnt] & 0x80 != 0 {
-        gpio::set_high(SER_PIN);
+        gpio::set_high(SER[cnt]);
     } else {
-        gpio::set_low(SER_PIN);
+        gpio::set_low(SER[cnt]);
     }
 }
 
 extern "C" fn io_irq_bank0_handler() {
     unsafe {
         let io_bank0 = &(*IO_BANK0::ptr());
-        if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // check for interrupt on pin 15
+        if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
             clock(0);
             
-            io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true)); // clear interrupt
-        } else if io_bank0.proc0_ints[2].read().gpio0_edge_high().bits() { // check for interrupt on pin 16
+            io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true));
+        } else if io_bank0.proc0_ints[2].read().gpio2_edge_low().bits() { // CLK[1]
+            clock(1);
+            
+            io_bank0.intr[2].write(|w| w.gpio2_edge_low().bit(true));
+        } else if io_bank0.proc0_ints[2].read().gpio0_edge_high().bits() { // LAT
             latch();
             
-            io_bank0.intr[2].write(|w| w.gpio0_edge_high().bit(true)); // clear interrupt
+            io_bank0.intr[2].write(|w| w.gpio0_edge_high().bit(true));
         }
     }
 }
