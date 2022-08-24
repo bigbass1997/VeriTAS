@@ -62,7 +62,7 @@
       35,
       36
     ],
-    "visible_layers": "7fdffff_80000001",
+    "visible_layers": "7fcffff_80000001",
     "zone_display_mode": 0
   },
   "meta": {
@@ -72,27 +72,15 @@
   "project": {
     "files": [
       {
-        "name": "veritas.kicad_sch",
-        "open": true,
-        "window": {
-          "display": 1,
-          "maximized": true,
-          "pos_x": 468,
-          "pos_y": 0,
-          "size_x": 1280,
-          "size_y": 979
-        }
-      },
-      {
         "name": "veritas.kicad_pcb",
-        "open": true,
+        "open": false,
         "window": {
           "display": 0,
           "maximized": true,
-          "pos_x": 1872,
+          "pos_x": 1868,
           "pos_y": 0,
           "size_x": 1280,
-          "size_y": 562
+          "size_y": 576
         }
       }
     ]

@@ -1,4 +1,4 @@
-20121899865389591
+20121937176972132
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -85609,20 +85609,6 @@ varistor SIOV
 0
 2
 2
-pictas
-L77HDA26SD1CH4R
-L77HDA26SD1CH4R
-Connector
-0
-28
-27
-pictas
-PJRAN1X1U04X
-
-
-0
-3
-2
 veritas
 2171790001
 
@@ -85630,6 +85616,13 @@ veritas
 0
 20
 17
+veritas
+JLC_ToolingHole
+
+
+0
+0
+0
 veritas
 L77HDA26SD1CH4R
 L77HDA26SD1CH4R
@@ -85651,3 +85644,10 @@ QFN DFN_QFN
 0
 70
 57
+veritas
+TYPE-C-31-M-12
+
+
+0
+16
+16
