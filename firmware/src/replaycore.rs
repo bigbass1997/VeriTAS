@@ -1,29 +1,43 @@
+use alloc::vec;
 use alloc::vec::Vec;
 use cortex_m::asm::nop;
 use cortex_m::delay::Delay;
+use num_enum::FromPrimitive;
 use crate::{info, systems};
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[repr(u8)]
 pub enum VeritasMode {
-    Initial,
-    Idle,
-    ReplayN64,
-    ReplayNes,
-    ReplayA2600,
-    ReplayGenesis,
+    Initial = 0x00,
+    #[num_enum(default)]
+    Idle = 0x01,
+    ReplayN64 = 0x02,
+    ReplayNes = 0x03,
+    ReplayA2600 = 0x04,
+    ReplayGenesis = 0x05,
 }
 use VeritasMode::*;
 
 pub static mut VERITAS_MODE: VeritasMode = Initial;
 
+#[derive(Debug)]
 pub enum Transition {
     SoftReset,
     HardReset,
 }
 
-pub struct ReplayConfig {
+#[derive(Debug)]
+pub struct ReplayState {
     pub index_len: u32,
+    pub index_cur: u32,
     pub transitions: Vec<(u32, Transition)>,
+}
+impl ReplayState {
+    pub const fn new() -> Self { Self {
+        index_len: 0,
+        index_cur: 0,
+        transitions: vec![]
+    }}
 }
 
 pub fn run(mut delay: Delay) -> ! {

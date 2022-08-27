@@ -7,18 +7,12 @@ use rp2040_hal::vector_table::VectorTable;
 use rp2040_pac::{Peripherals, UART1};
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
 
+pub mod comms;
+
 /// Do not use outside of CORE1!
 pub static mut VTABLE1: VectorTable = VectorTable::new();
 
-pub enum Command {
-    
-}
-
-pub enum Response {
-    
-}
-
-pub fn run(uart: UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<Gpio9, FunctionUart>)>) -> ! {
+pub fn run(_uart: UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<Gpio9, FunctionUart>)>) -> ! {
     unsafe {
         // VTABLE1 uses the same PAC, but the Cortex processor handles the underlying addresses
         // differently, because they are being accessed from within core1, instead of core0.
@@ -27,7 +21,9 @@ pub fn run(uart: UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<G
         VTABLE1.activate(&mut pac.PPB);
         
         loop {
-            let mut cmd = [0u8];
+            comms::check_uart();
+            
+            /*let mut cmd = [0u8];
             if let Ok(_) = uart.read_full_blocking(&mut cmd) {
                 match cmd[0] {
                     0x01 => {
@@ -68,7 +64,7 @@ pub fn run(uart: UartPeripheral<Enabled, UART1, (Pin<Gpio8, FunctionUart>, Pin<G
                     },
                     _ => ()
                 }
-            }
+            }*/
         }
     }
 }

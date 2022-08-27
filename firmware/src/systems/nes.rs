@@ -5,11 +5,12 @@ use heapless::spsc::Queue;
 use rp2040_pac::Interrupt::IO_IRQ_BANK0;
 use rp2040_pac::{IO_BANK0, PPB, SIO, TIMER};
 use crate::hal::gpio;
-use crate::replaycore::{VERITAS_MODE, VeritasMode};
+use crate::replaycore::{ReplayState, VERITAS_MODE, VeritasMode};
 use crate::VTABLE0;
 
 /// Buffered list of controller inputs. 
 pub static mut INPUT_BUFFER: Queue<[u8; 2], 1024> = Queue::new();
+pub static mut REPLAY_STATE: ReplayState = ReplayState::new();
 
 static mut LATCH_FILTER_US: u32 = 8000;
 static mut OVERREAD: u8 = 1;
@@ -89,6 +90,7 @@ unsafe fn latch() {
         LAST_LATCH = time;
         
         LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or_else(|| [0xFF, 0xFF]);
+        REPLAY_STATE.index_cur += 1;
     }
     
     WORKING_INPUT = LATCHED_INPUT;
