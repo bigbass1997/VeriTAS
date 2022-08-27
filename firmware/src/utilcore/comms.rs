@@ -2,7 +2,7 @@ use alloc::format;
 use num_enum::{IntoPrimitive, FromPrimitive};
 use crate::hal::uart;
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
-use crate::systems;
+use crate::{info, systems};
 
 #[derive(IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
@@ -68,7 +68,7 @@ pub fn check_uart() {
                                 Response::BufferFull
                             };
                             
-                            uart::write_blocking(1, &[&[status.into()], input.as_slice()].concat());
+                            uart::write_blocking(1, &[&[status.into(), System::Nes.into()], input.as_slice()].concat());
                         },
                         System::N64 => {
                             use crate::systems::n64::INPUT_BUFFER;
@@ -88,7 +88,7 @@ pub fn check_uart() {
                                 Response::BufferFull
                             };
                             
-                            uart::write_blocking(1, &[&[status.into()], input.as_slice()].concat());
+                            uart::write_blocking(1, &[&[status.into(), System::N64.into()], input.as_slice()].concat());
                         },
                         System::Genesis => {
                             uart::write_one_blocking(1, Response::Err.into());
