@@ -10,6 +10,8 @@ also elliminates a need to pass around mutable references to the state.
 
 Any mutable static variables should be multi-core safe, unless otherwise noted.
 
+---
+
 #### GPIO Configuration
 The RP2040 HAL is extremely dependent on types and traits to prevent improper use of pins at compile-time.
 However, for some situations, like when a device needs to transition an already configured pin into a
@@ -18,6 +20,65 @@ issues are highlighted on Github ([rp-rs/rp-hal #368](https://github.com/rp-rs/r
 
 Because of this, the VeriTAS firmware uses custom, low-level, GPIO functions. While this is unsafe, it
 offers significantly better usability.
+
+---
+
+#### Communication Protocol
+All transactions are initiated by the host computer, using a command-response protocol. All commands are
+1 byte wide, and may be followed by additional data. Given the expected data for the command given,
+the device should always respond with a 1-byte wide response, which may also be followed by additional data.
+
+If any invalid/unrecognized commands are recieved, the device will return an `Err` response. Any extra data
+sent by the host may cause unexpected behavior!
+
+_(notice: this protocol may change at any time during development)_
+
+##### _Commands:_
+###### 0x01 - SetVeritasMode
+Changes the device's mode. Command byte must be followed by a 1-byte mode ID.
+
+| Mode | ID |
+|------|----|
+| Initial | 0x00 |
+| Idle | 0x01 |
+| ReplayN64 | 0x02 |
+| ReplayNes | 0x03 |
+| ReplayA2600 | 0x04 |
+| ReplayGenesis | 0x05 |
+
+_Invalid ID values will be interpreted as `Idle`._
+
+###### 0x02 - ProvideInput
+Enqueues input data for a specific system. Command byte must be followed by a 1-byte system ID, and then
+the expected input data for that system.
+
+| System | ID | Bytes |
+|--------|----|-------|
+| NES | 0x01 | 2 |
+| N64 | 0x03 | 16 |
+| Genesis | 0x08 | ? |
+| A2600 | 0x09 | ? |
+
+_Invalid ID values will cause an `Err` response._
+
+###### 0x03 - GetStatus
+_not implemented_
+
+Requests the current status of the device, in the form of a `Text` response.
+
+###### 0xAA - Ping
+Ping! Host should recieve a `Pong` response.
+
+##### _Responses:_
+| Name | ID   |
+|----|------|
+| Ok | 0x01 |
+| Text | 0x02 |
+| BufferFull | 0xF0 |
+| Pong | 0x55 |
+| Err | 0x00 |
+
+---
 
 ### Program Flow
 Below are general descriptions of the states the device can be in. There are some tasks handled by the
