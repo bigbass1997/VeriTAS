@@ -103,9 +103,11 @@ while true do
         if emu.framecount() <= movie.length() and emu.framecount() > 0 then
             local input = movie.getinput(emu.framecount() - 1)
             if input["Reset"] == true then
-                api.transition(handle, emu.framecount() - 1, 0x01)
+                print("Soft Reset on frame: "..(emu.framecount() - 1))
+                api.transition(handle, 0x05, emu.framecount() - 1, 0x01)
             elseif input["Power"] == true then
-                api.transition(handle, emu.framecount() - 1, 0x02)
+                print("Power Reset on frame: "..(emu.framecount() - 1))
+                api.transition(handle, 0x05, emu.framecount() - 1, 0x02)
             end
         end
         

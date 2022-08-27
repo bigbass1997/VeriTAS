@@ -236,8 +236,8 @@ end
 -- Packet-derived transitions are NOT supported! You'll need to encode that case yourself.
 -- index = 8-byte unsigned index number (number from 0x00000000 to 0xFFFFFFFF)
 -- kind = type of transition (0x01 = soft reset, 0x02 = power reset, 0x03 = restart TASD file)
-function api.transition(h, index, kind)
-    packet(h, TRANSITION, encodeNumber(index, 8)..char(kind))
+function api.transition(h, indexType, index, kind)
+    packet(h, TRANSITION, char(indexType)..encodeNumber(index, 8)..char(kind))
 end
 
 -- index = 4-byte unsigned frame index number, the start of the lag frame chunk (number from 0x00000000 to 0xFFFFFFFF)
