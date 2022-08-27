@@ -53,7 +53,7 @@ while (true) do
                 api.consoleType(handle, 1)
                 api.emulatorName(handle, "FCEUX")
                 api.dumpLastModified(handle)
-                api.numberOfFrames(handle)
+                api.totalFrames(handle)
                 api.rerecords(handle)
                 api.blankFrames(handle, 0)
                 api.portController(handle, 1, 0x0101)
@@ -70,14 +70,14 @@ while (true) do
             input[1] = joypad.get(1)
             
             if emu.lagged() == true then
-                if ( input[1].A == true  and input[1].B == true    and input[1].select == true and input[1].start == true and input[1].up == true and input[1].down == true and input[1].left == true   and input[1].right == false ) then
+                --[[if ( input[1].A == true  and input[1].B == true    and input[1].select == true and input[1].start == true and input[1].up == true and input[1].down == true and input[1].left == true   and input[1].right == false ) then
                     print("Reset frame detected! #"..tostring(frame))
                     
                     api.inputChunks(handle, {0, 0})
                     api.transition(handle, frame, 0x01)
                     
                     frame = frame + 1
-                end
+                end]]--
             else
                 writeFrame();
                 frame = frame + 1;

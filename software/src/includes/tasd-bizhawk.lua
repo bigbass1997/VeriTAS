@@ -61,7 +61,7 @@ while true do
                 api.consoleType(handle, 1)
                 api.emulatorName(handle, "Bizhawk")
                 api.dumpLastModified(handle)
-                api.numberOfFrames(handle)
+                api.totalFrames(handle)
                 api.rerecords(handle)
                 api.blankFrames(handle, 0)
                 api.portController(handle, 1, 0x0101)

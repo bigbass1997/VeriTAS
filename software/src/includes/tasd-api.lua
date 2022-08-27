@@ -9,32 +9,45 @@ local KEY_WIDTH     = char(0x02)
 local CONSOLE_TYPE      = char(0x00, 0x01)
 local CONSOLE_REGION    = char(0x00, 0x02)
 local GAME_TITLE        = char(0x00, 0x03)
-local AUTHOR            = char(0x00, 0x04)
-local CATEGORY          = char(0x00, 0x05)
-local EMULATOR_NAME     = char(0x00, 0x06)
-local EMULATOR_VERSION  = char(0x00, 0x07)
-local EMULATOR_CORE     = char(0x00, 0x08)
-local TAS_LAST_MODIFIED = char(0x00, 0x09)
-local DUMP_LAST_MODIFIED= char(0x00, 0x0A)
-local NUMBER_OF_FRAMES  = char(0x00, 0x0B)
-local RERECORDS         = char(0x00, 0x0C)
-local SOURCE_LINK       = char(0x00, 0x0D)
-local BLANK_FRAMES      = char(0x00, 0x0E)
-local VERIFIED          = char(0x00, 0x0F)
-local MEMORY_INIT       = char(0x00, 0x10)
+local ROM_NAME          = char(0x00, 0x04)
+local ATTRIBUTION       = char(0x00, 0x05)
+local CATEGORY          = char(0x00, 0x06)
+local EMULATOR_NAME     = char(0x00, 0x07)
+local EMULATOR_VERSION  = char(0x00, 0x08)
+local EMULATOR_CORE     = char(0x00, 0x09)
+local TAS_LAST_MODIFIED = char(0x00, 0x0A)
+local DUMP_CREATED      = char(0x00, 0x0B)
+local DUMP_LAST_MODIFIED= char(0x00, 0x0C)
+local TOTAL_FRAMES      = char(0x00, 0x0D)
+local RERECORDS         = char(0x00, 0x0E)
+local SOURCE_LINK       = char(0x00, 0x0F)
+local BLANK_FRAMES      = char(0x00, 0x10)
+local VERIFIED          = char(0x00, 0x11)
+local MEMORY_INIT       = char(0x00, 0x12)
+local GAME_IDENTIFIER   = char(0x00, 0x13)
+local MOVIE_LICENSE     = char(0x00, 0x14)
+local MOVIE_FILE        = char(0x00, 0x15)
 
 local PORT_CONTROLLER   = char(0x00, 0xF0)
 
-local LATCH_FILTER      = char(0x01, 0x01)
-local CLOCK_FILTER      = char(0x01, 0x02)
-local OVERREAD          = char(0x01, 0x03)
-local GAME_GENIE_CODE   = char(0x01, 0x04)
+local NES_LATCH_FILTER  = char(0x01, 0x01)
+local NES_CLOCK_FILTER  = char(0x01, 0x02)
+local NES_OVERREAD      = char(0x01, 0x03)
+local NES_GAME_GENIE_CODE= char(0x01, 0x04)
 
-local INPUT_CHUNKS      = char(0xFE, 0x01)
+local SNES_CLOCK_FILTER = char(0x02, 0x02)
+local SNES_OVERREAD     = char(0x02, 0x03)
+local SNES_GAME_GENIE_CODE= char(0x02, 0x04)
+
+local GENESIS_GAME_GENIE_CODE= char(0x08, 0x04)
+
+local INPUT_CHUNK       = char(0xFE, 0x01)
 local INPUT_MOMENT      = char(0xFE, 0x02)
 local TRANSITION        = char(0xFE, 0x03)
 local LAG_FRAME_CHUNK   = char(0xFE, 0x04)
 local MOVIE_TRANSITION  = char(0xFE, 0x05)
+local COMMENT           = char(0xFF, 0x01)
+local UNSPECIFIED       = char(0xFF, 0xFF)
 
 function calcExponent(number)
     local exp = 0
@@ -91,9 +104,14 @@ function api.gameTitle(h, title)
     packet(h, GAME_TITLE, title)
 end
 
+-- name = string
+function api.romName(h, name)
+    packet(h, ROM_NAME, name)
+end
+
 -- author = string
 function api.author(h, author)
-    packet(h, AUTHOR, author)
+    packet(h, ATTRIBUTION, encodeNumber(0x01, 1)..author)
 end
 
 -- category = string
@@ -125,8 +143,8 @@ function api.dumpLastModified(h)
     packet(h, DUMP_LAST_MODIFIED, encodeNumber(os.time(), 8))
 end
 
-function api.numberOfFrames(h)
-    packet(h, NUMBER_OF_FRAMES, encodeNumber(movie.length(), 4))
+function api.totalFrames(h)
+    packet(h, TOTAL_FRAMES, encodeNumber(movie.length(), 4))
 end
 
 function api.rerecords(h)
@@ -159,7 +177,7 @@ function api.verified(h, verified)
     end
 end
 
--- TODO function api.memoryInit(h, kind, required, name, p) -- p is optional
+-- TODO function api.memoryInit()
 
 -- port = port number byte (1-indexed)
 -- controllerType = 2-byte controller type number
@@ -168,27 +186,27 @@ function api.portController(h, port, controllerType)
 end
 
 -- filter = number from 0x00 to 0xFF
-function api.latchFilter(h, filter)
-    packet(h, LATCH_FILTER, char(filter))
+function api.nesLatchFilter(h, filter)
+    packet(h, NES_LATCH_FILTER, char(filter))
 end
 
 -- filter = number from 0x00 to 0xFF
-function api.clockFilter(h, filter)
-    packet(h, CLOCK_FILTER, char(filter))
+function api.nesClockFilter(h, filter)
+    packet(h, NES_CLOCK_FILTER, char(filter))
 end
 
 -- overread = either a number of 0 or 1, or a boolean
-function api.overread(h, overread)
+function api.nesOverread(h, overread)
     if type(overread) == "boolean" then
-        packet(h, OVERREAD, char(overread == true and 1 or overread == false and 0))
+        packet(h, NES_OVERREAD, char(overread == true and 1 or overread == false and 0))
     else
-        packet(h, OVERREAD, char(overread))
+        packet(h, NES_OVERREAD, char(overread))
     end
 end
 
 -- code == string (6 or 8 characters long)
-function api.gameGenieCode(h, code)
-    packet(h, GAME_GENIE_CODE, code)
+function api.nesGameGenieCode(h, code)
+    packet(h, NES_GAME_GENIE_CODE, code)
 end
 
 -- port = number from 0x01 to 0xFF (0x00 should never be used as a port number)
@@ -199,14 +217,15 @@ function api.inputChunks(h, port, chunk)
         payloadStr = payloadStr..char(chunk[i])
     end
     
-    packet(h, INPUT_CHUNKS, payloadStr)
+    packet(h, INPUT_CHUNK, payloadStr)
 end
 
 -- port = number from 0x01 to 0xFF (0x00 should never be used as a port number)
--- index = 4-byte unsigned index number (number from 0x00000000 to 0xFFFFFFFF)
+-- indexType = what this index represents (0x01 = frame, 0x02 = cycle count, 0x03 = milliseconds, 0x04 = microseconds * 10)
+-- index = 8-byte unsigned index number (number from 0x00000000 to 0xFFFFFFFF)
 -- input = array of bytes (each byte is a number with a value from 0x00 to 0xFF)
-function api.inputMoment(h, port, index, input)
-    local payloadStr = char(port)..encodeNumber(index, 4)
+function api.inputMoment(h, port, indexType, index, input)
+    local payloadStr = char(port)..char(indexType)..encodeNumber(index, 8)
     for i = 1, #input do
         payloadStr = payloadStr..char(input[i])
     end
@@ -215,21 +234,21 @@ function api.inputMoment(h, port, index, input)
 end
 
 -- Packet-derived transitions are NOT supported! You'll need to encode that case yourself.
--- index = 4-byte unsigned index number (number from 0x00000000 to 0xFFFFFFFF)
--- kind = type of transition (number from 0x00 to 0xFF)
+-- index = 8-byte unsigned index number (number from 0x00000000 to 0xFFFFFFFF)
+-- kind = type of transition (0x01 = soft reset, 0x02 = power reset, 0x03 = restart TASD file)
 function api.transition(h, index, kind)
-    packet(h, TRANSITION, encodeNumber(index, 4)..char(kind))
+    packet(h, TRANSITION, encodeNumber(index, 8)..char(kind))
 end
 
--- index = 4-byte unsigned index number, the start of the lag frame chunk (number from 0x00000000 to 0xFFFFFFFF)
+-- index = 4-byte unsigned frame index number, the start of the lag frame chunk (number from 0x00000000 to 0xFFFFFFFF)
 -- count = 4-byte length of the chunk (number from 0x00000000 to 0xFFFFFFFF)
 function api.lagFrameChunk(h, index, count)
     packet(h, LAG_FRAME_CHUNK, encodeNumber(index, 4)..encodeNumber(count, 4))
 end
 
 -- Packet-derived transitions are NOT supported! You'll need to encode that case yourself.
--- index = 4-byte unsigned index number (number from 0x00000000 to 0xFFFFFFFF)
--- kind = type of transition (number from 0x00 to 0xFF)
+-- index = 4-byte unsigned frame index number (number from 0x00000000 to 0xFFFFFFFF)
+-- kind = type of transition (number from 0x01 to 0xFF)
 function api.movieTransition(h, index, kind)
     packet(h, MOVIE_TRANSITION, encodeNumber(index, 4)..char(kind))
 end
