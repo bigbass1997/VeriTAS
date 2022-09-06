@@ -72,15 +72,27 @@
   "project": {
     "files": [
       {
-        "name": "veritas.kicad_pcb",
-        "open": false,
+        "name": "veritas.kicad_sch",
+        "open": true,
         "window": {
-          "display": 0,
+          "display": 1,
           "maximized": true,
-          "pos_x": 1868,
+          "pos_x": 289,
           "pos_y": 0,
           "size_x": 1280,
-          "size_y": 576
+          "size_y": 979
+        }
+      },
+      {
+        "name": "veritas.kicad_pcb",
+        "open": true,
+        "window": {
+          "display": 1,
+          "maximized": true,
+          "pos_x": 736,
+          "pos_y": 0,
+          "size_x": 1280,
+          "size_y": 634
         }
       }
     ]
