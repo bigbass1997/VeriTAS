@@ -9,19 +9,18 @@ extern crate cortex_m_rt;
 
 use defmt::info;
 use defmt_rtt as _;
+use fugit::HertzU32;
 use panic_probe as _;
-use embedded_time::rate::*;
 use rp2040_hal::clocks::{Clock, ClocksManager, ClockSource};
 use rp2040_hal::gpio::pin::bank0::Pins;
-use rp2040_hal::gpio::FunctionUart;
 use rp2040_hal::multicore::{Multicore, Stack};
 use rp2040_hal::pll::{PLLConfig, setup_pll_blocking};
 use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
 use rp2040_hal::xosc::setup_xosc_blocking;
-use rp2040_hal::uart::{UartConfig, UartPeripheral};
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
-use rp2040_pac::{CorePeripherals, Peripherals};
+use rp2040_pac::{CorePeripherals, Peripherals, SYSINFO, UART0};
+use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
 
 mod allocator;
@@ -34,8 +33,8 @@ mod utilcore;
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
-const PLL_SYS_160MHZ: PLLConfig<Megahertz> = PLLConfig {
-        vco_freq: Megahertz(1440),
+const PLL_SYS_160MHZ: PLLConfig = PLLConfig {
+        vco_freq: HertzU32::MHz(1440),
         refdiv: 1,
         post_div1: 3,
         post_div2: 3,
@@ -61,49 +60,43 @@ pub unsafe extern "C" fn main() -> ! {
     VTABLE0.activate(&mut pac.PPB);
     
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
-    //watchdog.disable();
     
     let mut clocks = ClocksManager::new(pac.CLOCKS);
-    let xosc = setup_xosc_blocking(pac.XOSC, 12000000.Hz()).ok().unwrap();
+    let xosc = setup_xosc_blocking(pac.XOSC, HertzU32::Hz(12000000)).ok().unwrap();
     let pll_sys = setup_pll_blocking(pac.PLL_SYS, xosc.operating_frequency().into(), PLL_SYS_160MHZ, &mut clocks, &mut pac.RESETS).ok().unwrap();
     let pll_usb = setup_pll_blocking(pac.PLL_USB, xosc.operating_frequency().into(), PLL_USB_48MHZ, &mut clocks, &mut pac.RESETS).ok().unwrap();
     clocks.reference_clock.configure_clock(&xosc, xosc.get_freq()).ok().unwrap();
     clocks.system_clock.configure_clock(&pll_sys, pll_sys.get_freq()).ok().unwrap();
     clocks.usb_clock.configure_clock(&pll_usb, pll_usb.get_freq()).ok().unwrap();
     clocks.adc_clock.configure_clock(&pll_usb, pll_usb.get_freq()).ok().unwrap();
-    clocks.rtc_clock.configure_clock(&pll_usb, 46875u32.Hz()).ok().unwrap();
+    clocks.rtc_clock.configure_clock(&pll_usb, HertzU32::Hz(46875u32)).ok().unwrap();
     clocks.peripheral_clock.configure_clock(&clocks.system_clock, clocks.system_clock.freq()).ok().unwrap();
     watchdog.enable_tick_generation(12);
     
     let core = CorePeripherals::take().unwrap();
-    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().integer());
+    let delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
     
     let mut sio = Sio::new(pac.SIO);
     
-    let pins = Pins::new(
+    let _pins = Pins::new(
         pac.IO_BANK0,
         pac.PADS_BANK0,
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    //pins.gpio13.into_push_pull_output();
-    let uart_pins = (
-        pins.gpio8.into_mode::<FunctionUart>(),
-        pins.gpio9.into_mode::<FunctionUart>(),
-    );
     
-    let mut uart_config = UartConfig::default();
-    uart_config.baudrate = Baud(500000);
-    let uart = UartPeripheral::new(
-        pac.UART1,
-        uart_pins,
-        &mut pac.RESETS
-    ).enable(uart_config, clocks.peripheral_clock.freq()).unwrap();
+    let usb_bus = UsbBusAllocator::new(rp2040_hal::usb::UsbBus::new(
+        pac.USBCTRL_REGS,
+        pac.USBCTRL_DPRAM,
+        clocks.usb_clock,
+        true,
+        &mut pac.RESETS,
+    ));
     
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
     let cores = mc.cores();
     let core1 = &mut cores[1];
-    let _ = core1.spawn(unsafe { &mut CORE1_STACK.mem }, move || { utilcore::run(uart) }).unwrap();
+    let _ = core1.spawn(unsafe { &mut CORE1_STACK.mem }, move || { utilcore::run(usb_bus) }).unwrap();
     
     replaycore::run(delay);
 }

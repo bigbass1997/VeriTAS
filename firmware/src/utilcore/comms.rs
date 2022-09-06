@@ -1,6 +1,9 @@
-use alloc::format;
+use alloc::{format, vec};
 use num_enum::{IntoPrimitive, FromPrimitive};
-use crate::hal::uart;
+use rp2040_hal::usb::UsbBus;
+use usb_device::class_prelude::UsbBusAllocator;
+use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
+use usbd_serial::SerialPort;
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
 use crate::{info, systems};
 
@@ -44,37 +47,160 @@ pub enum System {
     Unknown = 0xFF,
 }
 
-pub fn check_uart() {
+
+pub struct UsbController<'a> {
+    usb_bus: Option<UsbBusAllocator<UsbBus>>,
+    usb_dev: Option<UsbDevice<'a, UsbBus>>,
+    serial: Option<SerialPort<'a, UsbBus>>
+}
+impl<'a> UsbController<'a> {
+    pub const fn empty() -> Self { Self {
+        usb_bus: None,
+        usb_dev: None,
+        serial: None
+    }}
+    
+    #[inline(always)]
+    pub fn poll(&mut self) -> bool {
+        if let Some(usb_dev) = self.usb_dev.as_mut() {
+            if let Some(serial) = self.serial.as_mut() {
+                return usb_dev.poll(&mut [serial]);
+            }
+        }
+        
+        false
+    }
+    
+    #[inline(always)]
+    pub fn read_one(&mut self) -> Option<u8> {
+        if let Some(serial) = self.serial.as_mut() {
+            let mut buf = [0u8];
+            match serial.read(&mut buf) {
+                Ok(count) if count == 1 => return Some(buf[0]),
+                _ => ()
+            }
+        }
+        
+        None
+    }
+    
+    #[inline(always)]
+    pub fn read_one_blocking(&mut self) -> u8 {
+        let serial = self.serial.as_mut().expect("USB serial not initialized");
+        let mut buf = [0u8];
+        loop {
+            match serial.read(&mut buf) {
+                Ok(count) if count == 1 => return buf[0],
+                _ => ()
+            }
+        }
+    }
+    
+    #[inline(always)]
+    pub fn read_blocking(&mut self, buf: &mut [u8]) {
+        let serial = self.serial.as_mut().expect("USB serial not initialized");
+        let mut ptr = 0usize;
+        
+        while ptr < buf.len() {
+            let mut data = [0u8];
+            match serial.read(&mut data) {
+                Ok(count) if count == 1 => {
+                    buf[ptr] = data[0];
+                    ptr += 1;
+                },
+                _ => ()
+            }
+        }
+    }
+    
+    #[inline(always)]
+    pub fn write_one_blocking(&mut self, buf: u8) {
+        let serial = self.serial.as_mut().expect("USB serial not initialized");
+        
+        loop {
+            match serial.write(&[buf]) {
+                Ok(count) if count == 1 => break,
+                _ => ()
+            }
+        }
+    }
+    
+    #[inline(always)]
+    pub fn write_blocking(&mut self, buf: &[u8]) {
+        let serial = self.serial.as_mut().expect("USB serial not initialized");
+        let mut ptr = 0usize;
+        
+        while ptr < buf.len() {
+            match serial.write(&[buf[ptr]]) {
+                Ok(count) if count == 1 => ptr += 1,
+                _ => ()
+            }
+        }
+    }
+}
+
+pub static mut USB: UsbController = UsbController::empty();
+
+pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
     unsafe {
-        if let Some(cmd) = uart::read_one(1) {
+        USB.usb_bus = Some(usb_bus);
+        USB.serial = Some(SerialPort::new(USB.usb_bus.as_ref().unwrap()));
+        USB.usb_dev = Some(UsbDeviceBuilder::new(USB.usb_bus.as_ref().unwrap(), UsbVidPid(0x16C0, 0x27DD))
+            .manufacturer("Bigbass")
+            .product("VeriTAS")
+            .serial_number("0.1.0")
+            .device_class(2)
+            .self_powered(true)
+            .build());
+    }
+}
+
+pub fn check_usb() {
+    unsafe {
+        if !USB.poll() {
+            return;
+        }
+        
+        if let Some(cmd) = USB.read_one() {
             match cmd.into() {
                 Command::SetReplayMode => {
-                    VERITAS_MODE = uart::read_one_blocking(1).into();
+                    VERITAS_MODE = USB.read_one_blocking().into();
                     
-                    uart::write_one_blocking(1, Response::Ok.into());
+                    USB.write_one_blocking(Response::Ok.into());
                 },
                 Command::ProvideInput => {
-                    match uart::read_one_blocking(1).into() {
+                    match USB.read_one_blocking().into() {
                         System::Nes => {
                             use crate::systems::nes::INPUT_BUFFER;
+                            let mut len = [0u8; 2];
+                            USB.read_blocking(&mut len);
+                            let len = u16::from_be_bytes([len[0], len[1]]);
                             
-                            let mut input = [0u8; 2];
-                            uart::read_blocking(1, &mut input);
-                            let status = if !INPUT_BUFFER.is_full() {
-                                INPUT_BUFFER.enqueue(input).unwrap();
-                                
-                                Response::Ok
-                            } else {
-                                Response::BufferFull
+                            let mut inputs = vec![0u8; len as usize];
+                            USB.read_blocking(&mut inputs);
+                            let mut ptr = 0usize;
+                            let status = loop {
+                                if !INPUT_BUFFER.is_full() {
+                                    if ptr < inputs.len() {
+                                        let input = [inputs[ptr], inputs[ptr + 1]];
+                                        INPUT_BUFFER.enqueue(input).unwrap();
+                                        
+                                        ptr += 2;
+                                    } else {
+                                        break (Response::Ok, ptr as u16, ((INPUT_BUFFER.capacity() - INPUT_BUFFER.len()) * 2) as u16);
+                                    }
+                                } else {
+                                    break (Response::BufferFull, ptr as u16, 0);
+                                }
                             };
                             
-                            uart::write_blocking(1, &[&[status.into(), System::Nes.into()], input.as_slice()].concat());
+                            USB.write_blocking(&[&[status.0.into()], status.1.to_be_bytes().as_slice(), status.2.to_be_bytes().as_slice(), &[System::Nes.into()], inputs.as_slice()].concat());
                         },
                         System::N64 => {
                             use crate::systems::n64::INPUT_BUFFER;
                             
                             let mut input = [0u8; 16];
-                            uart::read_blocking(1, &mut input);
+                            USB.read_blocking(&mut input);
                             let status = if !INPUT_BUFFER.is_full() {
                                 let mut inputs = [0u32; 4];
                                 for i in 0..4 {
@@ -88,16 +214,16 @@ pub fn check_uart() {
                                 Response::BufferFull
                             };
                             
-                            uart::write_blocking(1, &[&[status.into(), System::N64.into()], input.as_slice()].concat());
+                            USB.write_blocking(&[&[status.into(), System::N64.into()], input.as_slice()].concat());
                         },
                         System::Genesis => {
-                            uart::write_one_blocking(1, Response::Err.into());
+                            USB.write_one_blocking(Response::Err.into());
                         },
                         System::A2600 => {
-                            uart::write_one_blocking(1, Response::Err.into());
+                            USB.write_one_blocking(Response::Err.into());
                         },
                         System::Unknown => {
-                            uart::write_one_blocking(1, Response::Err.into());
+                            USB.write_one_blocking(Response::Err.into());
                         },
                     }
                 },
@@ -112,15 +238,15 @@ pub fn check_uart() {
                     };
                     
                     let s = format!("Mode: {:?}, Index: {}/{}", mode, index.0, index.1);
-                    uart::write_blocking(1, &[&[Response::Text.into()], (s.len() as u32).to_be_bytes().as_slice(), s.as_bytes()].concat());
+                    USB.write_blocking(&[&[Response::Text.into()], (s.len() as u32).to_be_bytes().as_slice(), s.as_bytes()].concat());
                 }
                 
                 Command::Ping => {
-                    uart::write_one_blocking(1, Response::Pong.into());
+                    USB.write_one_blocking(Response::Pong.into());
                 }
                 
                 Command::Invalid => {
-                    uart::write_one_blocking(1, Response::Err.into());
+                    USB.write_one_blocking(Response::Err.into());
                 },
             }
         }
