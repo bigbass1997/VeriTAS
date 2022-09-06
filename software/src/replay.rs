@@ -1,6 +1,10 @@
+use std::cmp::{max, min};
+use std::io::stdout;
 use std::path::PathBuf;
 use std::time::Duration;
 use clap::ArgMatches;
+use crossterm::{event, terminal};
+use crossterm::event::{Event, KeyCode};
 use log::{error, info, warn};
 use serialport::ClearBuffer;
 use tasd::spec::{ConsoleType, InputChunk, KEY_CONSOLE_TYPE, KEY_INPUT_CHUNK, TasdMovie};
@@ -17,8 +21,52 @@ pub fn handle(matches: &ArgMatches) {
         return;
     }
     
-    let mut dev = Device::new(matches.value_of("device").unwrap(), 500000, Duration::from_secs(10)).unwrap();
+    let mut dev = Device::new(matches.value_of("device").unwrap(), 500000, Duration::from_secs(6)).unwrap();
     dev.clear(ClearBuffer::All);
+    
+    {
+        let pong = dev.ping();
+        if pong != Response::Pong {
+            error!("Failed to ping device. {:?}", pong);
+            return;
+        }
+    }
+    
+    if matches.is_present("manual") {
+        let _stdout = stdout();
+        
+        dev.set_replay_mode(VeritasMode::ReplayNes);
+        
+        terminal::enable_raw_mode().unwrap();
+        
+        loop {
+            match event::read() {
+                Ok(event) => match event {
+                    Event::Key(event) => match event.code {
+                        KeyCode::Char('q') => break,
+                        
+                        KeyCode::Char('z') => { dev.provide_input(System::Nes, &[0x7F, 0xFF]); },
+                        KeyCode::Char('x') => { dev.provide_input(System::Nes, &[0xBF, 0xFF]); },
+                        KeyCode::Char(' ') => { dev.provide_input(System::Nes, &[0xDF, 0xFF]); },
+                        KeyCode::Enter => { dev.provide_input(System::Nes, &[0xEF, 0xFF]); },
+                        KeyCode::Up => { dev.provide_input(System::Nes, &[0xF7, 0xFF]); },
+                        KeyCode::Down => { dev.provide_input(System::Nes, &[0xFB, 0xFF]); },
+                        KeyCode::Left => { dev.provide_input(System::Nes, &[0xFD, 0xFF]); },
+                        KeyCode::Right => { dev.provide_input(System::Nes, &[0xFE, 0xFF]); },
+                        _ => ()
+                    }
+                    _ => ()
+                }
+                Err(_) => ()
+            }
+        }
+        
+        terminal::disable_raw_mode().unwrap();
+        
+        dev.set_replay_mode(VeritasMode::Idle);
+        println!("");
+        return;
+    }
     
     let tasd = TasdMovie::new(&PathBuf::from(matches.value_of("movie").unwrap())).expect("Failed to parse movie.");
     let console = tasd.search_by_key(vec![KEY_CONSOLE_TYPE]).first().expect("No console type provided in TASD. Cannot continue.").as_any().downcast_ref::<ConsoleType>().unwrap();
@@ -32,25 +80,21 @@ pub fn handle(matches: &ArgMatches) {
         inputs
     };
 
-    {
-        let pong = dev.ping();
-        if pong != Response::Pong {
-            error!("Failed to ping device. {:?}", pong);
-            return;
-        }
-    }
-
     info!("{}", dev.get_status());
     
     match console.kind.into() {
         System::Nes => {
             let mut ptr = 0usize;
             let mut has_started = false;
+            let mut prev_empty = 512;
             
             println!("Prefilling buffer...");
             while ptr < inputs.len() {
-                let input = &inputs[ptr..(ptr + 2)];
-                let (res, system, data) = dev.provide_input(System::Nes, input);
+                let remaining = inputs.len() - ptr;
+                let input = &inputs[ptr..(ptr + max(2, min(prev_empty, min(128, remaining))))];
+                let (res, written, empty_space, system, data) = dev.provide_input(System::Nes, input);
+                ptr += written as usize;
+                prev_empty = empty_space as usize;
                 
                 if system != System::Nes {
                     warn!("Possible communication error! System doesn't match: (sent) {:?} vs (recv) {:?}", System::Nes, system);
@@ -60,7 +104,7 @@ pub fn handle(matches: &ArgMatches) {
                 }
                 
                 match res {
-                    Response::Ok => ptr += 2,
+                    Response::Ok => (),
                     Response::BufferFull if !has_started => {
                         has_started = true;
                         

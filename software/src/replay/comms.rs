@@ -83,11 +83,11 @@ impl Device {
         self.read_u8().into()
     }
     
-    pub fn provide_input(&mut self, system: System, data: &[u8]) -> (Response, System, Vec<u8>) {
-        self.write(&[&[Command::ProvideInput.into(), system.into()], data].concat());
-        let res = self.read(data.len() + 2);
+    pub fn provide_input(&mut self, system: System, data: &[u8]) -> (Response, u16, u16, System, Vec<u8>) {
+        self.write(&[&[Command::ProvideInput.into(), system.into()], (data.len() as u16).to_be_bytes().as_slice(), data].concat());
+        let res = self.read(data.len() + 6);
         
-        (res[0].into(), res[1].into(), res[2..].to_vec())
+        (res[0].into(), u16::from_be_bytes([res[1], res[2]]), u16::from_be_bytes([res[3], res[4]]), res[5].into(), res[6..].to_vec())
     }
     
     pub fn get_status(&mut self) -> String {

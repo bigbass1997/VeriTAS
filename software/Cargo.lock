@@ -1601,6 +1601,7 @@ dependencies = [
  "bytes",
  "clap",
  "crossbeam",
+ "crossterm",
  "env_logger",
  "hex",
  "log",
