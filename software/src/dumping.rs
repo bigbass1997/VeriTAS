@@ -4,7 +4,7 @@ use crossbeam::sync::WaitGroup;
 use log::{info, warn};
 use crate::config::{DumperSection, SaveLoad};
 use crate::dumping::movies::{Format, Movie, Source};
-use crate::dumping::roms::RomCache;
+use crate::dumping::roms::{Rom, RomCache};
 
 pub mod movies;
 pub mod roms;
@@ -13,6 +13,10 @@ pub mod roms;
 pub fn handle(matches: &ArgMatches, config: DumperSection) {
     let mut cache = RomCache::load("cache/hashes.toml");
     let mut movies = vec![];
+    
+    if matches.is_present("override") && !matches.is_present("local") {
+        warn!("Override ROM provided, but no --local movie was specified. Override will be ignored.");
+    }
     
     // Collect movies from TASVideos
     if let Some(fetches) = matches.values_of_lossy("fetch") {
@@ -63,6 +67,11 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
         if let Some(hash) = movie.find_hash() {
             if let Some(rom) = cache.search(&hash) {
                 prepared.push((movie, rom));
+            } else if let Some(over) = matches.value_of("override") {
+                let local = matches.value_of("local").unwrap();
+                if movie.path == PathBuf::from(local) {
+                    prepared.push((movie, Rom::with_path(over).remove(0)));
+                }
             } else {
                 warn!("Failed to find matching rom. Expected hash: {}, Movie: {}", hash, movie.source);
             }

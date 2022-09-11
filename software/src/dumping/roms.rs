@@ -105,6 +105,7 @@ mod serde_md5 {
 #[derive(Copy, Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub enum System {
     Nes,
+    Fds,
     N64,
     Atari2600,
 }
@@ -122,6 +123,7 @@ impl System {
         // Check file extension
         match extension {
             "nes" => return Some(Nes),
+            "fds" => return Some(Fds),
             "z64" | "n64" => return Some(N64),
             "a26" => return Some(Atari2600),
             _ => ()
@@ -146,9 +148,9 @@ impl System {
                         
                         hashes.push(Self::hash(&data));
                     }
-                    
                 }
             },
+            Fds => hashes.push(Self::hash(data)),
             N64 => hashes.push(Self::hash(data)),
             Atari2600 => hashes.push(Self::hash(data)),
         }
