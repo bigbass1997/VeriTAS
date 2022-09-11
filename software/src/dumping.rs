@@ -50,10 +50,11 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
     }
     
     // Refresh and save rom cache
-    // TODO: Lock refresh behind CLI argument "--refresh"
-    info!("Refreshing rom cache...");
-    cache.refresh(Some(&config.rom_directory));
-    cache.save("cache/hashes.toml");
+    if cache.roms.is_empty() || matches.is_present("refresh") || cache.is_fs_outdated(&config.rom_directory) {
+        info!("Refreshing rom cache...");
+        cache.refresh(Some(&config.rom_directory));
+        cache.save("cache/hashes.toml");
+    }
     
     // Match movies to any cached roms
     info!("Attempting to match movies to roms...");
@@ -73,6 +74,10 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
     // Spin up threads for dump procedure
     let wg = WaitGroup::new();
     for (movie, rom) in prepared {
+        if !rom.path.is_file() {
+            warn!("Attempted to dump using cached ROM that no longer exists. Recommend running 'veritas dump --refresh'. Path: {}", rom.path.display());
+            continue
+        }
         info!("Beginning dump: {}", movie.source);
         
         match movie.format {

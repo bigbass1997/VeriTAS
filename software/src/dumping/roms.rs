@@ -5,7 +5,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use md5::{Md5, Digest};
 use sha1::Sha1;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 use crate::dumping::roms::System::*;
 use crate::SaveLoad;
 
@@ -207,10 +207,24 @@ impl Rom {
 
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct RomCache {
+    pub fs: HashSet<String>,
     pub roms: HashSet<Rom>,
 }
 impl SaveLoad for RomCache {}
 impl RomCache {
+    pub fn is_fs_outdated<P: AsRef<Path>>(&self, path: P) -> bool {
+        let path = path.as_ref();
+        let path = path.canonicalize().unwrap_or(path.to_path_buf());
+        let fs: HashSet<String> = Self::walked_dir(path).iter().map(|e| e.path().display().to_string()).collect();
+        for found in fs {
+            if !self.fs.contains(&found) {
+                return true
+            }
+        }
+        
+        false
+    }
+    
     pub fn refresh<P: AsRef<Path>>(&mut self, path: Option<P>) {
         self.roms.retain(|rom| rom.path.is_file());
         
@@ -220,13 +234,18 @@ impl RomCache {
             if path.is_file() {
                 warn!("Expecting a directory of roms, instead got a single file: {}", path.display());
             } else if path.is_dir() {
-                for entry in WalkDir::new(&path).follow_links(true).into_iter().filter_map(|e| e.ok()).filter(|e| e.path().is_file()) {
-                    self.roms.extend(Rom::with_path(entry.path());
+                self.fs = Self::walked_dir(path).iter().map(|e| e.path().display().to_string()).collect();
+                for entry in &self.fs {
+                    self.roms.extend(Rom::with_path(entry));
                 }
             } else {
                 warn!("Unable to check rom hashes; provided rom directory doesn't exist: {}", path.display());
             }
         }
+    }
+    
+    fn walked_dir<P: AsRef<Path>>(path: P) -> Vec<DirEntry> {
+        WalkDir::new(&path).follow_links(true).into_iter().filter_map(|e| e.ok()).filter(|e| e.path().is_file()).collect()
     }
     
     pub fn search(&self, hash: &Hash) -> Option<Rom> {
