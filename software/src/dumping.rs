@@ -147,10 +147,6 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
                     dump_path.set_extension("tasd");
                     
                     if dump_path.is_file() {
-                        //let final_path = PathBuf::from(dump_path.file_name().unwrap());
-                        //let final_path = final_path.canonicalize().unwrap_or(final_path);
-                        //std::fs::write(&final_path, std::fs::read(dump_path).unwrap()).unwrap();
-                        
                         info!("Dump complete! {} {}", dump_path.display(), rom.path.display());
                     } else {
                         warn!("Dump failed! {}", movie.source);

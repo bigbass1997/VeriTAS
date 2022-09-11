@@ -5,6 +5,7 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use md5::{Md5, Digest};
 use sha1::Sha1;
+use walkdir::WalkDir;
 use crate::dumping::roms::System::*;
 use crate::SaveLoad;
 
@@ -219,33 +220,13 @@ impl RomCache {
             if path.is_file() {
                 warn!("Expecting a directory of roms, instead got a single file: {}", path.display());
             } else if path.is_dir() {
-                for file in Self::recursive_files(path) {
-                    self.roms.extend(Rom::with_path(file));
+                for entry in WalkDir::new(&path).follow_links(true).into_iter().filter_map(|e| e.ok()).filter(|e| e.path().is_file()) {
+                    self.roms.extend(Rom::with_path(entry.path());
                 }
             } else {
                 warn!("Unable to check rom hashes; provided rom directory doesn't exist: {}", path.display());
             }
         }
-    }
-    
-    fn recursive_files<P: AsRef<Path>>(path: P) -> Vec<PathBuf> {
-        let mut files = vec![];
-        
-        match path.as_ref().read_dir() {
-            Ok(dir) => for entry in dir {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if path.is_file() {
-                        files.push(path);
-                    } else if path.is_dir() {
-                        files.extend_from_slice(&Self::recursive_files(path));
-                    }
-                }
-            },
-            Err(_) => return files,
-        }
-        
-        files
     }
     
     pub fn search(&self, hash: &Hash) -> Option<Rom> {
