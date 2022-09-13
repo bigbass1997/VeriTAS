@@ -47,7 +47,7 @@ fn main() {
                 .allow_invalid_utf8(true)
                 .short('f')
                 .long("fetch")
-                .help("Fetch one or more TASVideos publications and/or submissions. (e.g. 1234M or 1234S, for publication or submission respectively)"))
+                .help("Fetch one or more TASVideos publications, submissions, and/or userfiles. (e.g. 1234M, 1234S, #637869332153615356, for publication, submission, or userfile respectively)"))
             .arg(Arg::new("local")
                 .takes_value(true)
                 .long("local")

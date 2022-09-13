@@ -1,7 +1,9 @@
 use std::fmt::Formatter;
 use std::io::{Cursor, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use base64ct::{Base64, Encoding};
+use flate2::read::GzDecoder;
+use log::warn;
 use zip::ZipArchive;
 use Format::*;
 use Source::*;
@@ -27,11 +29,18 @@ impl Format {
 pub enum Source {
     Publication(i32),
     Submission(i32),
+    Userfile(u64),
     Local(PathBuf),
 }
 impl Source {
     pub fn parse<S: AsRef<str>>(id_code: S) -> Option<Self> {
         let id_code = id_code.as_ref().to_uppercase();
+        if id_code.starts_with('#') {
+            let id = id_code[1..].parse().unwrap();
+            
+            return Some(Userfile(id));
+        }
+        
         let last_char = id_code.chars().last().unwrap();
         let id = id_code[0..(id_code.len() - 1)].parse().unwrap();
         
@@ -47,6 +56,7 @@ impl std::fmt::Display for Source {
         match self {
             Publication(id) => write!(f, "{}M", id),
             Submission(id) => write!(f, "{}S", id),
+            Userfile(id) => write!(f, "#{}", id),
             Local(path) => write!(f, "{}", path.display().to_string()),
         }
     }
@@ -91,6 +101,36 @@ impl Movie {
                     })
                 } else { None }
             },
+            Userfile(id) => {
+                let (gzip, name) = tasvideos_api_rs::get_userfile(*id).unwrap();
+                let data = Self::deflate(gzip);
+                
+                let filename = match name {
+                    Some(name) => {
+                        match Path::new(&name).extension() {
+                            Some(ext) => format!("{}.{}", source.to_string(), ext.to_string_lossy()),
+                            None => {
+                                warn!("Userfile has no file extension. File detection will not be possible for: {}", source);
+                                source.to_string()
+                            },
+                        }
+                    },
+                    None => {
+                        warn!("Unable to locate file extension for Userfile: {}", source);
+                        source.to_string()
+                    },
+                };
+                let path = PathBuf::from(format!("cache/movies/{}", filename));
+                std::fs::write(&path, data).unwrap();
+                
+                if let Some(format) = Format::from_extension(path.extension().unwrap_or_default().to_string_lossy()) { 
+                    Some(Self {
+                        path: path.canonicalize().unwrap_or(path),
+                        format,
+                        source,
+                    })
+                } else { None }
+            },
             Local(path) => {
                 let ext = path.extension().unwrap().to_string_lossy();
                 
@@ -116,6 +156,14 @@ impl Movie {
         file.read_to_end(&mut data).unwrap();
         
         (data, ext.to_owned())
+    }
+    
+    fn deflate(gzip: Vec<u8>) -> Vec<u8> {
+        let mut d = GzDecoder::new(gzip.as_slice());
+        let mut data = vec![];
+        d.read_to_end(&mut data).unwrap();
+        
+        data
     }
     
     pub fn find_hash(&self) -> Option<Hash> {
