@@ -5,7 +5,7 @@ use heapless::spsc::Queue;
 use rp2040_pac::Interrupt::IO_IRQ_BANK0;
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
 use crate::hal::gpio;
-use crate::hal::gpio::{PIN_CNT_0, PIN_CNT_1, PIN_CNT_2, PIN_CNT_3, PIN_CNT_4, PIN_CON_RESET, PIN_DETECT};
+use crate::hal::gpio::{PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_CON_RESET, PIN_DETECT, PIN_DISPLAY_STROBE0};
 use crate::replaycore::{ReplayState, VERITAS_MODE, VeritasMode};
 use crate::VTABLE0;
 
@@ -21,13 +21,16 @@ static mut LAST_LATCH: u64 = 0;
 static mut LATCHED_INPUT: [u8; 2] = [0xFF, 0xFF];
 static mut WORKING_INPUT: [u8; 2] = [0xFF, 0xFF];
 
-const SER: [usize; 2] = [PIN_CNT_1, PIN_CNT_3];
-const CLK: [usize; 2] = [PIN_CNT_2, PIN_CNT_4];
-const LAT: usize = PIN_CNT_0;
+const SER: [usize; 2] = [PIN_CNT_5, PIN_CNT_4];
+const CLK: [usize; 2] = [PIN_CNT_7, PIN_CNT_6];
+const LAT: usize = PIN_CNT_3;
 const RST: usize = PIN_CON_RESET;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
+    gpio::set_as_output(PIN_DISPLAY_STROBE0, false, false);
+    gpio::set_low(PIN_DISPLAY_STROBE0);
+    
     gpio::set_low(PIN_DETECT);
     gpio::set_as_input(PIN_DETECT, false, true);
     
@@ -50,15 +53,27 @@ fn enable_interrupts() {
     unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
         
+        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio7_edge_low().bit(true));
         (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio6_edge_low().bit(true));
-        (*IO_BANK0::ptr()).intr[2].write(|w| w.gpio0_edge_low().bit(true));
-        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio4_edge_high().bit(true));
+        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio3_edge_high().bit(true));
         
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio6_edge_low().bit(true)); // CLK[0]
-        (*IO_BANK0::ptr()).proc0_inte[2].modify(|_, w| w.gpio0_edge_low().bit(true)); // CLK[1]
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio4_edge_high().bit(true)); // LAT
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio7_edge_low().bit(true)); // CLK[0]
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio6_edge_low().bit(true)); // CLK[1]
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio3_edge_high().bit(true)); // LAT
         (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
     }
+}
+
+fn disable_interrupts() {
+    unsafe {
+        (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
+        
+        while !INPUT_BUFFER.is_empty() {
+            INPUT_BUFFER.dequeue().unwrap_or_default();
+        }
+    }
+    
+    info!("stopped NES replay");
 }
 
 
@@ -77,6 +92,8 @@ pub fn run(_delay: &mut Delay) {
         while VERITAS_MODE == VeritasMode::ReplayNes {
             nop()
         }
+        
+        disable_interrupts();
     }
 }
 
@@ -89,6 +106,11 @@ unsafe fn latch() {
         LAST_LATCH = time;
         
         LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or_else(|| [0xFF, 0xFF]);
+        
+        if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
+            VERITAS_MODE = VeritasMode::Idle;
+        }
+        
         REPLAY_STATE.index_cur += 1;
     }
     
@@ -121,18 +143,18 @@ unsafe fn clock(cnt: usize) {
 extern "C" fn io_irq_bank0_handler() {
     unsafe {
         let io_bank0 = &(*IO_BANK0::ptr());
-        if io_bank0.proc0_ints[1].read().gpio6_edge_low().bits() { // CLK[0]
+        if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
             clock(0);
             
-            io_bank0.intr[1].write(|w| w.gpio6_edge_low().bit(true));
-        } else if io_bank0.proc0_ints[2].read().gpio0_edge_low().bits() { // CLK[1]
+            io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true));
+        } else if io_bank0.proc0_ints[1].read().gpio6_edge_low().bits() { // CLK[1]
             clock(1);
             
-            io_bank0.intr[2].write(|w| w.gpio0_edge_low().bit(true));
-        } else if io_bank0.proc0_ints[1].read().gpio4_edge_high().bits() { // LAT
+            io_bank0.intr[1].write(|w| w.gpio6_edge_low().bit(true));
+        } else if io_bank0.proc0_ints[1].read().gpio3_edge_high().bits() { // LAT
             latch();
             
-            io_bank0.intr[1].write(|w| w.gpio4_edge_high().bit(true));
+            io_bank0.intr[1].write(|w| w.gpio3_edge_high().bit(true));
         }
     }
 }

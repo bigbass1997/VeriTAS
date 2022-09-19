@@ -5,41 +5,39 @@ use rp2040_pac::{IO_BANK0, PADS_BANK0, SIO};
 use rp2040_pac::io_bank0::gpio::gpio_ctrl::{FUNCSEL_A, FUNCSEL_R};
 use rp2040_pac::pads_bank0::gpio::{DRIVE_A, DRIVE_R};
 
-pub const PIN_DEBUG_RX: usize = 0;
-pub const PIN_CNT_17: usize = 0;
-pub const PIN_DEBUG_TX: usize = 1;
-pub const PIN_CNT_18: usize = 1;
+pub const PIN_DISPLAY_STROBE0: usize = 0;
+pub const PIN_DISPLAY_STROBE1: usize = 1;
+pub const PIN_DISPLAY_STROBE2: usize = 2;
+pub const PIN_DISPLAY_STROBE3: usize = 3;
+pub const PIN_DISPLAY_SER: usize = 4;
+pub const PIN_DISPLAY_CLK: usize = 5;
 
-pub const PIN_DISPLAY_STROBE0: usize = 2;
-pub const PIN_DISPLAY_STROBE1: usize = 3;
-pub const PIN_DISPLAY_STROBE2: usize = 4;
-pub const PIN_DISPLAY_STROBE3: usize = 5;
-pub const PIN_DISPLAY_SER: usize = 6;
-pub const PIN_DISPLAY_CLK: usize = 7;
+pub const PIN_CON_RESET: usize = 6;
+pub const PIN_ALT_CLK: usize = 7;
 
-pub const PIN_BRIDGE_RX: usize = 8;
-pub const PIN_BRIDGE_TX: usize = 9;
+pub const PIN_CNT_0: usize = 8;
+pub const PIN_CNT_1: usize = 9;
+pub const PIN_CNT_2: usize = 10;
+pub const PIN_CNT_3: usize = 11;
+pub const PIN_CNT_4: usize = 12;
+pub const PIN_CNT_5: usize = 13;
+pub const PIN_CNT_6: usize = 14;
+pub const PIN_CNT_7: usize = 15;
+pub const PIN_CNT_8: usize = 16;
+pub const PIN_CNT_9: usize = 17;
+pub const PIN_CNT_10: usize = 18;
+pub const PIN_CNT_11: usize = 19;
+pub const PIN_CNT_12: usize = 20;
+pub const PIN_CNT_13: usize = 21;
+pub const PIN_CNT_14: usize = 22;
+pub const PIN_CNT_15: usize = 23;
+pub const PIN_CNT_16: usize = 24;
 
-pub const PIN_CON_RESET: usize = 10;
-pub const PIN_ALT_CLK: usize = 11;
+pub const PIN_CNT_17: usize = 25;
+pub const PIN_CNT_18: usize = 26;
+pub const PIN_CNT_17_DIR: usize = 27;
+pub const PIN_CNT_18_DIR: usize = 28;
 
-pub const PIN_CNT_0: usize = 12;
-pub const PIN_CNT_1: usize = 13;
-pub const PIN_CNT_2: usize = 14;
-pub const PIN_CNT_3: usize = 15;
-pub const PIN_CNT_4: usize = 16;
-pub const PIN_CNT_5: usize = 17;
-pub const PIN_CNT_6: usize = 18;
-pub const PIN_CNT_7: usize = 19;
-pub const PIN_CNT_8: usize = 20;
-pub const PIN_CNT_9: usize = 21;
-pub const PIN_CNT_10: usize = 22;
-pub const PIN_CNT_11: usize = 23;
-pub const PIN_CNT_12: usize = 24;
-pub const PIN_CNT_13: usize = 25;
-pub const PIN_CNT_14: usize = 26;
-pub const PIN_CNT_15: usize = 27;
-pub const PIN_CNT_16: usize = 28;
 pub const PIN_DETECT: usize = 29;
 
 #[inline(always)]
