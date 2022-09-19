@@ -6,7 +6,7 @@ use rp2040_pac::Interrupt::IO_IRQ_BANK0;
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
 use crate::hal::gpio;
 use crate::hal::gpio::{PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_CON_RESET, PIN_DETECT, PIN_DISPLAY_STROBE0};
-use crate::replaycore::{ReplayState, VERITAS_MODE, VeritasMode};
+use crate::replaycore::{ReplayState, Transition, VERITAS_MODE, VeritasMode};
 use crate::VTABLE0;
 
 /// Buffered list of controller inputs. 
@@ -28,6 +28,8 @@ const RST: usize = PIN_CON_RESET;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
+    unsafe { REPLAY_STATE.reset(); }
+    
     gpio::set_as_output(PIN_DISPLAY_STROBE0, false, false);
     gpio::set_low(PIN_DISPLAY_STROBE0);
     
@@ -106,6 +108,18 @@ unsafe fn latch() {
         LAST_LATCH = time;
         
         LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or_else(|| [0xFF, 0xFF]);
+        
+        if let Some(transition) = REPLAY_STATE.transitions.get(&REPLAY_STATE.index_cur) {
+            match transition {
+                Transition::SoftReset => {
+                    gpio::set_high(RST);
+                    info!("Transition: SoftReset");
+                    gpio::set_low(RST);
+                },
+                Transition::PowerReset => (),
+                Transition::Unsupported => (),
+            }
+        }
         
         if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
             VERITAS_MODE = VeritasMode::Idle;

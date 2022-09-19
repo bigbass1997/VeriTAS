@@ -5,14 +5,15 @@ use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::SerialPort;
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
-use crate::{info, systems};
+use crate::systems;
 
 #[derive(IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
 pub enum Command {
     SetReplayMode = 0x01,
     ProvideInput = 0x02,
-    GetStatus = 0x03,
+    ProvideTransitions = 0x03,
+    GetStatus = 0x04,
     
     Ping = 0xAA,
     
@@ -226,6 +227,9 @@ pub fn check_usb() {
                             USB.write_one_blocking(Response::Err.into());
                         },
                     }
+                },
+                Command::ProvideTransitions => {
+                    
                 },
                 Command::GetStatus => {
                     let mode = VERITAS_MODE;

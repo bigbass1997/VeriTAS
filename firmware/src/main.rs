@@ -1,6 +1,7 @@
 
 #![allow(unused_unsafe)]
 #![feature(alloc_error_handler)]
+#![feature(const_btree_new)]
 #![no_std]
 #![no_main]
 
@@ -19,7 +20,7 @@ use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
 use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
-use rp2040_pac::{CorePeripherals, Peripherals, SYSINFO, UART0};
+use rp2040_pac::{CorePeripherals, Peripherals, UART0};
 use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
 

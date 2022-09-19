@@ -1,5 +1,4 @@
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::collections::btree_map::BTreeMap;
 use cortex_m::asm::nop;
 use cortex_m::delay::Delay;
 use num_enum::FromPrimitive;
@@ -20,24 +19,36 @@ use VeritasMode::*;
 
 pub static mut VERITAS_MODE: VeritasMode = Initial;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[repr(u8)]
 pub enum Transition {
-    SoftReset,
-    HardReset,
+    SoftReset = 0x01,
+    PowerReset = 0x02,
+    //RestartTasdFile = 0x03,
+    //PacketDerived = 0xFF,
+    
+    #[num_enum(default)]
+    Unsupported = 0x00,
 }
 
 #[derive(Debug)]
 pub struct ReplayState {
     pub index_len: u32,
     pub index_cur: u32,
-    pub transitions: Vec<(u32, Transition)>,
+    pub transitions: BTreeMap<u32, Transition>,
 }
 impl ReplayState {
     pub const fn new() -> Self { Self {
-        index_len: 0,
+        index_len: 0xFFFFFFFF,
         index_cur: 0,
-        transitions: vec![]
+        transitions: BTreeMap::new()
     }}
+    
+    pub fn reset(&mut self) {
+        self.index_len = 0xFFFFFFFF;
+        self.index_cur = 0;
+        self.transitions.clear();
+    }
 }
 
 pub fn run(mut delay: Delay) -> ! {
