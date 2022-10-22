@@ -7,7 +7,7 @@ edition = "2021"
 log = "0.4"
 env_logger = "0.9"
 clap = { version = "3.1", features = ["cargo"] }
-tasvideos-api-rs = { path = "/data/programming/rust/rust-workspace/tasvideos-api-rs" }
+tasvideos-api-rs = "0.1.0"
 serde = "1.0"
 serde_derive = "1.0"
 toml = "0.5"
