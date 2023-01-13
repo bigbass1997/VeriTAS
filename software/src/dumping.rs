@@ -69,8 +69,9 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
                 prepared.push((movie, rom));
             } else if let Some(over) = matches.value_of("override") {
                 let local = matches.value_of("local").unwrap();
-                if movie.path == PathBuf::from(local) {
+                if movie.path == PathBuf::from(local).canonicalize().unwrap() {
                     prepared.push((movie, Rom::with_path(over).remove(0)));
+                    info!("Using override");
                 }
             } else {
                 warn!("Failed to find matching rom. Expected hash: {}, Movie: {}", hash, movie.source);

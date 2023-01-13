@@ -5,6 +5,7 @@ local wasMovieLoaded = false
 local readyToDump = false
 
 local writtenFrames = 0
+local latch_count = 0;
 
 local playerKeys = {
     {"P1 Right", "P1 Left", "P1 Down", "P1 Up", "P1 Start", "P1 Select", "P1 B", "P1 A"},
@@ -39,6 +40,7 @@ function writeFrame()
         api.inputChunks(handle, i, { data[i] })
     end
     
+    latch_count = latch_count + 1
     --print("("..emu.framecount()..") "..writtenFrames.." is "..string.format("0x%02X 0x%02X", chunk[1], chunk[2]))
 end
 
@@ -91,6 +93,17 @@ while true do
     
     
     if readyToDump then
+        if emu.framecount() <= movie.length() and emu.framecount() > 0 then
+            local input = movie.getinput(emu.framecount() - 1)
+            if input["Reset"] == true then
+                print("Soft Reset on frame: "..(emu.framecount() - 1).." | latch: "..latch_count)
+                api.transition(handle, 0x05, latch_count * 2, 0x01)
+            elseif input["Power"] == true then
+                print("Power Reset on frame: "..(emu.framecount() - 1))
+                api.transition(handle, 0x05, latch_count * 2, 0x02)
+            end
+        end
+        
         if not emu.islagged() and emu.framecount() <= movie.length() and emu.framecount() > 0 then
             --print(emu.framecount()..": "..inspect(movie.getinput(emu.framecount())))
             --table.insert(allInputs, movie.getinput(emu.framecount()))
@@ -98,17 +111,6 @@ while true do
             writeFrame()
             handle:flush()
             writtenFrames = writtenFrames + 1
-        end
-        
-        if emu.framecount() <= movie.length() and emu.framecount() > 0 then
-            local input = movie.getinput(emu.framecount() - 1)
-            if input["Reset"] == true then
-                print("Soft Reset on frame: "..(emu.framecount() - 1))
-                api.transition(handle, 0x05, emu.framecount() - 1, 0x01)
-            elseif input["Power"] == true then
-                print("Power Reset on frame: "..(emu.framecount() - 1))
-                api.transition(handle, 0x05, emu.framecount() - 1, 0x02)
-            end
         end
         
         --[[if emu.islagged() then
