@@ -4,8 +4,11 @@ use rp2040_hal::usb::UsbBus;
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::SerialPort;
-use crate::replaycore::{VERITAS_MODE, VeritasMode};
+use crate::replaycore::{Transition, VERITAS_MODE, VeritasMode};
 use crate::systems;
+use defmt::info;
+use defmt::Format;
+use crate::systems::nes::REPLAY_STATE;
 
 #[derive(IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
@@ -13,7 +16,8 @@ pub enum Command {
     SetReplayMode = 0x01,
     ProvideInput = 0x02,
     ProvideTransitions = 0x03,
-    GetStatus = 0x04,
+    SetReplayLength = 0x04,
+    GetStatus = 0x05,
     
     Ping = 0xAA,
     
@@ -149,7 +153,8 @@ pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
         USB.usb_dev = Some(UsbDeviceBuilder::new(USB.usb_bus.as_ref().unwrap(), UsbVidPid(0x16C0, 0x27DD))
             .manufacturer("Bigbass")
             .product("VeriTAS")
-            .serial_number("0.1.0")
+            //.serial_number("0.1.0")
+            .serial_number("VeriTAS")
             .device_class(2)
             .self_powered(true)
             .build());
@@ -229,7 +234,28 @@ pub fn check_usb() {
                     }
                 },
                 Command::ProvideTransitions => {
+                    let mut count = [0u8; 4];
+                    USB.read_blocking(&mut count);
                     
+                    for _ in 0..u32::from_be_bytes(count) {
+                        let mut buf = [0u8; 5];
+                        USB.read_blocking(&mut buf);
+                        
+                        let tra: (u32, Transition) = (u32::from_be_bytes(buf[0..4].try_into().unwrap()), buf[4].into());
+                        let u: u8 = tra.1.into();
+                        info!("Added {:02X} at {}", u, tra.0);
+                        REPLAY_STATE.transitions.push(tra);
+                    }
+                    
+                    USB.write_one_blocking(Response::Ok.into());
+                },
+                Command::SetReplayLength => {
+                    let mut length = [0u8; 4];
+                    USB.read_blocking(&mut length);
+                    
+                    REPLAY_STATE.index_len = u32::from_be_bytes(length);
+                    
+                    USB.write_one_blocking(Response::Ok.into());
                 },
                 Command::GetStatus => {
                     let mode = VERITAS_MODE;
@@ -240,6 +266,8 @@ pub fn check_usb() {
                         ),
                         _ => (0, 0)
                     };
+                    
+                    let index = (systems::nes::REPLAY_STATE.index_cur, systems::nes::REPLAY_STATE.index_len);
                     
                     let s = format!("Mode: {:?}, Index: {}/{}", mode, index.0, index.1);
                     USB.write_blocking(&[&[Response::Text.into()], (s.len() as u32).to_be_bytes().as_slice(), s.as_bytes()].concat());

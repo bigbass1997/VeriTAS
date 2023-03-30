@@ -3,13 +3,16 @@ use std::time::Duration;
 use log::error;
 use num_enum::{IntoPrimitive, FromPrimitive};
 use serialport::{ClearBuffer, SerialPort};
+use tasd::spec::Transition;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
 pub enum Command {
     SetReplayMode = 0x01,
     ProvideInput = 0x02,
-    GetStatus = 0x03,
+    ProvideTransitions = 0x03,
+    SetReplayLength = 0x04,
+    GetStatus = 0x05,
     
     Ping = 0xAA,
     
@@ -88,6 +91,24 @@ impl Device {
         let res = self.read(data.len() + 6);
         
         (res[0].into(), u16::from_be_bytes([res[1], res[2]]), u16::from_be_bytes([res[3], res[4]]), res[5].into(), res[6..].to_vec())
+    }
+    
+    pub fn provide_transitions(&mut self, transitions: Vec<Transition>) -> Response {
+        let mut payload = vec![Command::ProvideTransitions.into()];
+        payload.extend_from_slice(&(transitions.len() as u32).to_be_bytes());
+        for packet in transitions {
+            let data = [(packet.index as u32).to_be_bytes().as_slice(), &[packet.transition_kind]].concat();
+            payload.extend_from_slice(&data);
+        }
+        self.write(&payload);
+        
+        self.read_u8().into()
+    }
+    
+    pub fn set_replay_length(&mut self, length: u32) -> Response {
+        self.write(&[&[Command::SetReplayLength.into()], length.to_be_bytes().as_slice()].concat());
+        
+        self.read_u8().into()
     }
     
     pub fn get_status(&mut self) -> String {

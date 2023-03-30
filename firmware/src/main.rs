@@ -20,9 +20,11 @@ use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
 use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
-use rp2040_pac::{CorePeripherals, Peripherals, UART0};
+use rp2040_pac::{CorePeripherals, Peripherals};
 use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
+use crate::hal::gpio;
+use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR};
 
 mod allocator;
 mod hal;
@@ -93,6 +95,11 @@ pub unsafe extern "C" fn main() -> ! {
         true,
         &mut pac.RESETS,
     ));
+    
+    gpio::set_as_output(PIN_CNT_18, true, false);
+    
+    gpio::set_as_output(PIN_CNT_18_DIR, true, false);
+    gpio::set_low(PIN_CNT_18_DIR);
     
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
     let cores = mc.cores();

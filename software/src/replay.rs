@@ -6,8 +6,8 @@ use clap::ArgMatches;
 use crossterm::{event, terminal};
 use crossterm::event::{Event, KeyCode};
 use log::{error, info, warn};
-use serialport::ClearBuffer;
-use tasd::spec::{ConsoleType, InputChunk, KEY_CONSOLE_TYPE, KEY_INPUT_CHUNK, TasdMovie};
+use serialport::{ClearBuffer, SerialPortType};
+use tasd::spec::{ConsoleType, InputChunk, KEY_CONSOLE_TYPE, KEY_INPUT_CHUNK, KEY_TRANSITION, TasdMovie, Transition};
 use crate::replay::comms::{Device, Response, System, VeritasMode};
 
 mod comms;
@@ -21,7 +21,17 @@ pub fn handle(matches: &ArgMatches) {
         return;
     }
     
-    let mut dev = Device::new(matches.value_of("device").unwrap(), 500000, Duration::from_secs(6)).unwrap();
+    let device_path = if let Some(device) = matches.value_of("device") {
+        device.to_string()
+    } else {
+        serialport::available_ports().unwrap()
+            .into_iter()
+            .filter_map(|info| if let SerialPortType::UsbPort(usbport) = info.port_type { Some((info.port_name, usbport)) } else { None })
+            .find(|(_, port)| port.serial_number == Some("VeriTAS".into()))
+            .map(|(name, _)| name)
+            .unwrap()
+    };
+    let mut dev = Device::new(device_path, 500000, Duration::from_secs(6)).unwrap();
     dev.clear(ClearBuffer::All);
     
     {
@@ -70,6 +80,7 @@ pub fn handle(matches: &ArgMatches) {
     
     let tasd = TasdMovie::new(&PathBuf::from(matches.value_of("movie").unwrap())).expect("Failed to parse movie.");
     let console = tasd.search_by_key(vec![KEY_CONSOLE_TYPE]).first().expect("No console type provided in TASD. Cannot continue.").as_any().downcast_ref::<ConsoleType>().unwrap();
+    let transitions: Vec<Transition> = tasd.search_by_key(vec![KEY_TRANSITION]).into_iter().map(|packet| packet.as_any().downcast_ref::<Transition>().unwrap().clone()).collect();
     let inputs: Vec<u8> = {
         let chunks: Vec<&[u8]> = tasd.search_by_key(vec![KEY_INPUT_CHUNK]).iter().map(|packet| packet.as_any().downcast_ref::<InputChunk>().unwrap().inputs.as_slice()).collect();
         let mut inputs = vec![];
@@ -79,14 +90,17 @@ pub fn handle(matches: &ArgMatches) {
         
         inputs
     };
-
-    info!("{}", dev.get_status());
     
     match console.kind.into() {
         System::Nes => {
             let mut ptr = 0usize;
             let mut has_started = false;
             let mut prev_empty = 512;
+            
+            dev.set_replay_length((inputs.len() / 2) as u32);
+            dev.provide_transitions(transitions);
+            
+            info!("{}", dev.get_status());
             
             println!("Prefilling buffer...");
             while ptr < inputs.len() {

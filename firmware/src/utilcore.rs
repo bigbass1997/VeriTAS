@@ -1,3 +1,4 @@
+use defmt::info;
 use rp2040_hal::usb::UsbBus;
 use rp2040_hal::vector_table::VectorTable;
 use rp2040_pac::Peripherals;
@@ -17,7 +18,9 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
         VTABLE1.activate(&mut pac.PPB);
         
         
+        info!("Initializing usb...");
         comms::init_usb(usb_bus);
+        info!("Done with usb");
         
         loop {
             comms::check_usb();
