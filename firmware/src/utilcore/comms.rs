@@ -153,8 +153,7 @@ pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
         USB.usb_dev = Some(UsbDeviceBuilder::new(USB.usb_bus.as_ref().unwrap(), UsbVidPid(0x16C0, 0x27DD))
             .manufacturer("Bigbass")
             .product("VeriTAS")
-            //.serial_number("0.1.0")
-            .serial_number("VeriTAS")
+            .serial_number("VeriTAS") //TODO: provide version number
             .device_class(2)
             .self_powered(true)
             .build());
