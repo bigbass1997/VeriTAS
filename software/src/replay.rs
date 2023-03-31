@@ -80,13 +80,26 @@ pub fn handle(matches: &ArgMatches) {
     
     let tasd = TasdMovie::new(&PathBuf::from(matches.value_of("movie").unwrap())).expect("Failed to parse movie.");
     let console = tasd.search_by_key(vec![KEY_CONSOLE_TYPE]).first().expect("No console type provided in TASD. Cannot continue.").as_any().downcast_ref::<ConsoleType>().unwrap();
-    let transitions: Vec<Transition> = tasd.search_by_key(vec![KEY_TRANSITION]).into_iter().map(|packet| packet.as_any().downcast_ref::<Transition>().unwrap().clone()).collect();
+    let mut transitions: Vec<Transition> = tasd.search_by_key(vec![KEY_TRANSITION]).into_iter().map(|packet| packet.as_any().downcast_ref::<Transition>().unwrap().clone()).collect();
+    for trans in &mut transitions {
+        trans.index /= 2;
+        
+        println!("{trans}");
+    }
     let inputs: Vec<u8> = {
         let chunks: Vec<&[u8]> = tasd.search_by_key(vec![KEY_INPUT_CHUNK]).iter().map(|packet| packet.as_any().downcast_ref::<InputChunk>().unwrap().inputs.as_slice()).collect();
+        //let mut inputs = vec![0xFF, 0xFF];
         let mut inputs = vec![];
         for chunk in chunks {
             inputs.extend_from_slice(chunk);
         }
+        
+        /*for (i, chunk) in inputs.chunks_exact(2).enumerate() {
+            println!("{i:>4}: {:02X} {:02X}", chunk[0], chunk[1]);
+        }
+        return;*/
+        
+        //inputs.extend_from_slice(&vec![0xFFu8; 2 * 60 * 10]);
         
         inputs
     };

@@ -1,7 +1,7 @@
 use defmt::info;
 use rp2040_hal::usb::UsbBus;
 use rp2040_hal::vector_table::VectorTable;
-use rp2040_pac::Peripherals;
+use rp2040_hal::pac::Peripherals;
 use usb_device::class_prelude::UsbBusAllocator;
 
 pub mod comms;

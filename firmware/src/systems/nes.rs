@@ -5,8 +5,8 @@ use heapless::spsc::Queue;
 use rp2040_pac::Interrupt::IO_IRQ_BANK0;
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
 use crate::hal::gpio;
-use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_CON_RESET, PIN_DETECT, PIN_DISPLAY_STROBE0};
-use crate::replaycore::{ReplayState, Transition, VERITAS_MODE, VeritasMode};
+use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT, PIN_DISPLAY_STROBE3};
+use crate::replaycore::{ReplayState, VERITAS_MODE, VeritasMode};
 use crate::VTABLE0;
 
 /// Buffered list of controller inputs. 
@@ -31,8 +31,8 @@ const RST_EN: usize = PIN_CNT_18_DIR;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
-    gpio::set_as_output(PIN_DISPLAY_STROBE0, false, false);
-    gpio::set_low(PIN_DISPLAY_STROBE0);
+    gpio::set_as_output(PIN_DISPLAY_STROBE3, false, false);
+    gpio::set_low(PIN_DISPLAY_STROBE3);
     
     gpio::set_low(PIN_DETECT);
     gpio::set_as_input(PIN_DETECT, false, true);
@@ -87,11 +87,16 @@ pub fn run(delay: &mut Delay) {
         initialize();
         
         info!("trans: {}", REPLAY_STATE.transitions.len());
-        info!("first: {:?}", REPLAY_STATE.transitions.first());
+        info!("first trans: {:?}", REPLAY_STATE.transitions.first());
+        let first = INPUT_BUFFER.peek().unwrap_or(&[0xAA, 0x55]);
+        info!("first input: {:02X} {:02X}", first[0], first[1]);
+        
         info!("starting NES replay..");
         
+        //io_irq_bank0_handler();
+        
         gpio::set_high(RST);
-        delay.delay_ms(10);
+        delay.delay_ms(50);
         gpio::set_low(RST);
         
         while gpio::is_high(LAT) { nop(); }
@@ -99,7 +104,7 @@ pub fn run(delay: &mut Delay) {
         enable_interrupts();
         
         while VERITAS_MODE == VeritasMode::ReplayNes {
-            nop()
+            nop();
         }
         
         disable_interrupts();
@@ -111,7 +116,7 @@ pub fn run(delay: &mut Delay) {
     }
 }
 
-#[inline(always)]
+#[inline(never)]
 unsafe fn latch() {
     let timer = &*TIMER::ptr();
     let time = (timer.timelr.read().bits() as u64) | ((timer.timehr.read().bits() as u64) << 32);
@@ -124,10 +129,11 @@ unsafe fn latch() {
         REPLAY_STATE.index_cur += 1;
         
         /*if let Some(transition) = REPLAY_STATE.next_transition() {
-            info!("cur: {}", REPLAY_STATE.index_cur);
+            //info!("cur: {}", REPLAY_STATE.index_cur);
             match transition {
                 Transition::SoftReset => {
                     gpio::set_high(RST);
+                    LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
                     info!("Transition: SoftReset");
                     gpio::set_low(RST);
                 },
@@ -143,6 +149,9 @@ unsafe fn latch() {
     
     WORKING_INPUT = LATCHED_INPUT;
     
+    
+    //WORKING_INPUT = [0x7F, 0xFF];
+    
     // set first bit's state
     for i in 0..2 {
         if WORKING_INPUT[i] & 0x80 != 0 {
@@ -153,12 +162,12 @@ unsafe fn latch() {
     }
 }
 
-#[inline(always)]
+#[inline(never)]
 unsafe fn clock(cnt: usize) {
     WORKING_INPUT[cnt] <<= 1;
     WORKING_INPUT[cnt] |= OVERREAD;
     
-    delay(240); // CLOCK FILTER
+    delay(320); // CLOCK FILTER
     
     if WORKING_INPUT[cnt] & 0x80 != 0 {
         gpio::set_high(SER[cnt]);
@@ -168,7 +177,7 @@ unsafe fn clock(cnt: usize) {
 }
 
 extern "C" fn io_irq_bank0_handler() {
-    //gpio::set_high(PIN_DISPLAY_STROBE0); //debugging
+    gpio::set_high(PIN_DISPLAY_STROBE3); //debugging
     unsafe {
         let io_bank0 = &(*IO_BANK0::ptr());
         
@@ -176,9 +185,7 @@ extern "C" fn io_irq_bank0_handler() {
             latch();
             
             io_bank0.intr[1].write(|w| w.gpio3_edge_high().bit(true));
-        }
-        
-        if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
+        } else if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
             clock(0);
             
             io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true));
@@ -188,5 +195,5 @@ extern "C" fn io_irq_bank0_handler() {
             io_bank0.intr[1].write(|w| w.gpio6_edge_low().bit(true));
         }
     }
-    //gpio::set_low(PIN_DISPLAY_STROBE0); //debugging
+    gpio::set_low(PIN_DISPLAY_STROBE3); //debugging
 }
