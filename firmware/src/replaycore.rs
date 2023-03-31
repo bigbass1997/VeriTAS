@@ -1,5 +1,4 @@
 use alloc::vec::Vec;
-use core::fmt::{Display, Formatter};
 use cortex_m::asm::nop;
 use cortex_m::delay::Delay;
 use defmt::Format;
@@ -18,8 +17,6 @@ pub enum VeritasMode {
     ReplayGenesis = 0x05,
 }
 use VeritasMode::*;
-use crate::hal::gpio;
-use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_8};
 use crate::systems::nes::REPLAY_STATE;
 
 pub static mut VERITAS_MODE: VeritasMode = Initial;

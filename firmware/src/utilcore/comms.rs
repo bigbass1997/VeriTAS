@@ -4,10 +4,9 @@ use rp2040_hal::usb::UsbBus;
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::SerialPort;
+use defmt::info;
 use crate::replaycore::{Transition, VERITAS_MODE, VeritasMode};
 use crate::systems;
-use defmt::info;
-use defmt::Format;
 use crate::systems::nes::REPLAY_STATE;
 
 #[derive(IntoPrimitive, FromPrimitive)]
@@ -265,8 +264,6 @@ pub fn check_usb() {
                         ),
                         _ => (0, 0)
                     };
-                    
-                    let index = (systems::nes::REPLAY_STATE.index_cur, systems::nes::REPLAY_STATE.index_len);
                     
                     let s = format!("Mode: {:?}, Index: {}/{}", mode, index.0, index.1);
                     USB.write_blocking(&[&[Response::Text.into()], (s.len() as u32).to_be_bytes().as_slice(), s.as_bytes()].concat());
