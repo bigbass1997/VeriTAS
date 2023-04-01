@@ -20,6 +20,7 @@ use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
 use rp2040_hal::pac::{CorePeripherals, Peripherals};
+use rp2040_hal::sio::spinlock_reset;
 use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
 use crate::hal::gpio;
@@ -49,6 +50,7 @@ pub static mut VTABLE0: VectorTable = VectorTable::new();
 
 #[export_name = "main"]
 pub unsafe extern "C" fn main() -> ! {
+    spinlock_reset();
     {
         use core::mem::MaybeUninit;
         const HEAP_SIZE: usize = 16384;
