@@ -5,6 +5,7 @@ use rp2040_hal::pac::Peripherals;
 use usb_device::class_prelude::UsbBusAllocator;
 
 pub mod comms;
+pub mod displays;
 
 /// Do not use outside of CORE1!
 pub static mut VTABLE1: VectorTable = VectorTable::new();
@@ -17,6 +18,7 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
         VTABLE1.init(&mut pac.PPB);
         VTABLE1.activate(&mut pac.PPB);
         
+        displays::initialize();
         
         info!("Initializing usb...");
         comms::init_usb(usb_bus);
@@ -24,6 +26,7 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
         
         loop {
             comms::check_usb();
+            displays::check_displays();
         }
     }
 }

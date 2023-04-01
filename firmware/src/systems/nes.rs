@@ -2,11 +2,14 @@ use cortex_m::asm::{delay, nop};
 use cortex_m::delay::Delay;
 use defmt::info;
 use heapless::spsc::Queue;
-use rp2040_pac::Interrupt::IO_IRQ_BANK0;
+use heapless::Vec;
+use rp2040_pac::Interrupt::{IO_IRQ_BANK0, TIMER_IRQ_0};
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
 use crate::hal::gpio;
-use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT, PIN_DISPLAY_STROBE3};
+use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT, PIN_DISPLAY_STROBE2, PIN_DISPLAY_STROBE3};
 use crate::replaycore::{ReplayState, VERITAS_MODE, VeritasMode};
+use crate::utilcore::displays;
+use crate::utilcore::displays::Port;
 use crate::VTABLE0;
 
 /// Buffered list of controller inputs. 
@@ -18,13 +21,13 @@ static mut LATCH_FILTER_US: u32 = 8000;
 static mut OVERREAD: u8 = 1;
 
 static mut LAST_LATCH: u64 = 0;
-static mut LATCHED_INPUT: [u8; 2] = [0xFF, 0xFF];
+static mut ALARM_ACTIVATED: bool = false;
+static mut FRAME_INPUT: [u8; 2] = [0xFF, 0xFF];
 static mut WORKING_INPUT: [u8; 2] = [0xFF, 0xFF];
 
 const SER: [usize; 2] = [PIN_CNT_5, PIN_CNT_4];
 const CLK: [usize; 2] = [PIN_CNT_7, PIN_CNT_6];
 const LAT: usize = PIN_CNT_3;
-//const RST: usize = PIN_CON_RESET;
 const RST: usize = PIN_CNT_18;
 /// set HIGH to enable
 const RST_EN: usize = PIN_CNT_18_DIR;
@@ -52,6 +55,10 @@ pub fn initialize() {
     gpio::set_low(RST);
     
     gpio::set_high(RST_EN);
+    
+    unsafe {
+        FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
+    }
 }
 
 fn enable_interrupts() {
@@ -66,12 +73,22 @@ fn enable_interrupts() {
         (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio6_edge_low().bit(true)); // CLK[1]
         (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio3_edge_high().bit(true)); // LAT
         (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
+        
+        
+        VTABLE0.register_handler(TIMER_IRQ_0 as usize, timer_irq_0_handler);
+        
+        (*TIMER::ptr()).inte.modify(|_, w| w.alarm_0().bit(true));
+        (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
     }
 }
 
 fn disable_interrupts() {
     unsafe {
         (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
+        (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
+        
+        (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() & 0b1110));
+        (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
         
         while !INPUT_BUFFER.is_empty() {
             INPUT_BUFFER.dequeue().unwrap_or_default();
@@ -92,8 +109,6 @@ pub fn run(delay: &mut Delay) {
         info!("first input: {:02X} {:02X}", first[0], first[1]);
         
         info!("starting NES replay..");
-        
-        //io_irq_bank0_handler();
         
         gpio::set_high(RST);
         delay.delay_ms(50);
@@ -118,39 +133,12 @@ pub fn run(delay: &mut Delay) {
 
 #[inline(never)]
 unsafe fn latch() {
-    let timer = &*TIMER::ptr();
-    let time = (timer.timelr.read().bits() as u64) | ((timer.timehr.read().bits() as u64) << 32);
-    
-    if LAST_LATCH + (LATCH_FILTER_US as u64) < time { // if latch filter expired, load next input
-        LAST_LATCH = time;
-        
-        LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
-        
-        REPLAY_STATE.index_cur += 1;
-        
-        /*if let Some(transition) = REPLAY_STATE.next_transition() {
-            //info!("cur: {}", REPLAY_STATE.index_cur);
-            match transition {
-                Transition::SoftReset => {
-                    gpio::set_high(RST);
-                    LATCHED_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
-                    info!("Transition: SoftReset");
-                    gpio::set_low(RST);
-                },
-                Transition::PowerReset => (),
-                Transition::Unsupported => (),
-            }
-        }*/
-        if REPLAY_STATE.index_cur - 1 == REPLAY_STATE.index_len {
-            VERITAS_MODE = VeritasMode::Idle;
-        }
-        
+    if !ALARM_ACTIVATED {
+        ALARM_ACTIVATED = true;
+        (*TIMER::ptr()).alarm0.write(|w| w.bits((*TIMER::ptr()).timerawl.read().bits().wrapping_add(LATCH_FILTER_US)));
     }
     
-    WORKING_INPUT = LATCHED_INPUT;
-    
-    
-    //WORKING_INPUT = [0x7F, 0xFF];
+    WORKING_INPUT = FRAME_INPUT;
     
     // set first bit's state
     for i in 0..2 {
@@ -167,7 +155,7 @@ unsafe fn clock(cnt: usize) {
     WORKING_INPUT[cnt] <<= 1;
     WORKING_INPUT[cnt] |= OVERREAD;
     
-    delay(320); // CLOCK FILTER
+    delay(190); // CLOCK FILTER
     
     if WORKING_INPUT[cnt] & 0x80 != 0 {
         gpio::set_high(SER[cnt]);
@@ -196,4 +184,21 @@ extern "C" fn io_irq_bank0_handler() {
         }
     }
     gpio::set_low(PIN_DISPLAY_STROBE3); //debugging
+}
+
+extern "C" fn timer_irq_0_handler() {
+    gpio::set_high(PIN_DISPLAY_STROBE2); //debugging
+    unsafe {
+        FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
+        
+        displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
+        displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
+        
+        ALARM_ACTIVATED = false;
+        
+        info!("ALARM {:02X} {:02X}", FRAME_INPUT[0], FRAME_INPUT[1]);
+        
+        (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
+    }
+    gpio::set_low(PIN_DISPLAY_STROBE2); //debugging
 }
