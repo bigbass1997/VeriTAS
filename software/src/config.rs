@@ -36,6 +36,7 @@ impl Default for DumperSection {
 
 #[derive(Default, Clone, Deserialize, Serialize)]
 pub struct VeritasConfig {
+    pub useragent: String,
     pub dumper: DumperSection,
 }
 impl SaveLoad for VeritasConfig {}

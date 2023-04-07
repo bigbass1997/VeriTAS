@@ -6,22 +6,21 @@ edition = "2021"
 [dependencies]
 log = "0.4"
 env_logger = "0.9"
-clap = { version = "3.1", features = ["cargo"] }
-tasvideos-api-rs = "0.1.0"
+clap = { version = "4.2", features = ["cargo", "derive"] }
+tasvideos-api-rs = "0.2"
 serde = "1.0"
 serde_derive = "1.0"
 toml = "0.5"
 zip = "0.6"
 flate2 = "1.0"
 hex = "0.4"
-#md5 = "0.7"
 sha-1 = "0.10"
 md-5 = "0.10"
-base64ct = { version = "1.0.1", features = ["alloc"] } # zip depedency chain requires password-hash, which requires base64ct >=1, <1.1.0.
+base64ct = { version = "1.6", features = ["alloc"] }
 crossbeam = "0.8"
 serialport = "4.2"
-bytes = "1.2"
+bytes = "1.4"
 walkdir = "2.3"
 tasd = "0.1"
-num_enum = "0.5"
-crossterm = "0.25"
+num_enum = "0.6"
+crossterm = "0.26"

@@ -2,18 +2,18 @@ use std::cmp::{max, min};
 use std::io::stdout;
 use std::path::PathBuf;
 use std::time::Duration;
-use clap::ArgMatches;
 use crossterm::{event, terminal};
 use crossterm::event::{Event, KeyCode};
 use log::{error, info, warn};
 use serialport::{ClearBuffer, SerialPortType};
 use tasd::spec::{ConsoleType, InputChunk, KEY_CONSOLE_TYPE, KEY_INPUT_CHUNK, KEY_TRANSITION, TasdMovie, Transition};
 use crate::replay::comms::{Device, Response, System, VeritasMode};
+use crate::ReplayArgs;
 
 mod comms;
 
-pub fn handle(matches: &ArgMatches) {
-    if matches.is_present("list-devices") {
+pub fn handle(args: ReplayArgs) {
+    if args.list_devices {
         for port in serialport::available_ports().unwrap() {
             info!("{:?}", port);
         }
@@ -21,16 +21,14 @@ pub fn handle(matches: &ArgMatches) {
         return;
     }
     
-    let device_path = if let Some(device) = matches.value_of("device") {
-        device.to_string()
-    } else {
+    let device_path = args.device.unwrap_or_else(|| {
         serialport::available_ports().unwrap()
             .into_iter()
             .filter_map(|info| if let SerialPortType::UsbPort(usbport) = info.port_type { Some((info.port_name, usbport)) } else { None })
             .find(|(_, port)| port.serial_number == Some("VeriTAS".into()))
             .map(|(name, _)| name)
             .unwrap()
-    };
+    });
     let mut dev = Device::new(device_path, 500000, Duration::from_secs(6)).unwrap();
     dev.clear(ClearBuffer::All);
     
@@ -42,7 +40,7 @@ pub fn handle(matches: &ArgMatches) {
         }
     }
     
-    if matches.is_present("manual") {
+    if args.manual {
         let _stdout = stdout();
         
         dev.set_replay_mode(VeritasMode::ReplayNes);
@@ -78,7 +76,7 @@ pub fn handle(matches: &ArgMatches) {
         return;
     }
     
-    let tasd = TasdMovie::new(&PathBuf::from(matches.value_of("movie").unwrap())).expect("Failed to parse movie.");
+    let tasd = TasdMovie::new(&PathBuf::from(args.movie.unwrap())).expect("Failed to parse movie.");
     let console = tasd.search_by_key(vec![KEY_CONSOLE_TYPE]).first().expect("No console type provided in TASD. Cannot continue.").as_any().downcast_ref::<ConsoleType>().unwrap();
     let mut transitions: Vec<Transition> = tasd.search_by_key(vec![KEY_TRANSITION]).into_iter().map(|packet| packet.as_any().downcast_ref::<Transition>().unwrap().clone()).collect();
     for trans in &mut transitions {
@@ -88,8 +86,8 @@ pub fn handle(matches: &ArgMatches) {
     }
     let inputs: Vec<u8> = {
         let chunks: Vec<&[u8]> = tasd.search_by_key(vec![KEY_INPUT_CHUNK]).iter().map(|packet| packet.as_any().downcast_ref::<InputChunk>().unwrap().inputs.as_slice()).collect();
-        //let mut inputs = vec![0xFF, 0xFF];
-        let mut inputs = vec![];
+        let mut inputs = vec![0xFF, 0xFF];
+        //let mut inputs = vec![];
         for chunk in chunks {
             inputs.extend_from_slice(chunk);
         }
@@ -99,7 +97,7 @@ pub fn handle(matches: &ArgMatches) {
         }
         return;*/
         
-        //inputs.extend_from_slice(&vec![0xFFu8; 2 * 60 * 10]);
+        inputs.extend_from_slice(&vec![0xFFu8; 2 * 60 * 60]);
         
         inputs
     };

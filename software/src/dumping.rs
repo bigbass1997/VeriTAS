@@ -1,8 +1,8 @@
 use std::path::PathBuf;
-use clap::ArgMatches;
 use crossbeam::sync::WaitGroup;
 use log::{info, warn};
 use crate::config::{DumperSection, SaveLoad};
+use crate::DumpArgs;
 use crate::dumping::movies::{Format, Movie, Source};
 use crate::dumping::roms::{Rom, RomCache};
 
@@ -10,41 +10,40 @@ pub mod movies;
 pub mod roms;
 
 
-pub fn handle(matches: &ArgMatches, config: DumperSection) {
+pub fn handle(args: DumpArgs, config: DumperSection) {
     let mut cache = RomCache::load("cache/hashes.toml");
     let mut movies = vec![];
     
-    if matches.is_present("override") && !matches.is_present("local") {
+    if args.local_override.is_some() && args.local.is_none() {
         warn!("Override ROM provided, but no --local movie was specified. Override will be ignored.");
     }
     
     // Collect movies from TASVideos
-    if let Some(fetches) = matches.values_of_lossy("fetch") {
-        for fetch in fetches {
-            movies.push(match Source::parse(&fetch) {
-                Some(source) => match Movie::with_source(source.clone()) {
-                    Some(movie) => movie,
-                    None => {
-                        warn!("Skipping unsupported movie format: {}", source);
-                        continue;
-                    }
-                },
+    for fetch in args.fetch {
+        movies.push(match Source::parse(&fetch) {
+            Some(source) => match Movie::with_source(source.clone()) {
+                Some(movie) => movie,
                 None => {
-                    warn!("Couldn't recognize movie ID: {}", fetch);
+                    warn!("Skipping unsupported movie format: {}", source);
                     continue;
-                },
-            });
-        }
+                }
+            },
+            None => {
+                warn!("Couldn't recognize movie ID: {}", fetch);
+                continue;
+            },
+        });
     }
     
     // Collect movies from local machine
-    if let Some(local) = matches.value_of("local") {
-        let path = PathBuf::from(local);
+    if let Some(path) = args.local.as_ref() {
         if path.is_file() {
             match Movie::with_source(Source::Local(path.clone())) {
                 Some(movie) => movies.push(movie),
                 None => warn!("Skipping unsupported movie format: {}", path.display()),
             }
+        } else {
+            warn!("Local movie is not found: {}", path.display());
         }
     }
     
@@ -54,7 +53,7 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
     }
     
     // Refresh and save rom cache
-    if cache.roms.is_empty() || matches.is_present("refresh") || cache.is_fs_outdated(&config.rom_directory) {
+    if cache.roms.is_empty() || args.refresh || cache.is_fs_outdated(&config.rom_directory) {
         info!("Refreshing rom cache...");
         cache.refresh(Some(&config.rom_directory));
         cache.save("cache/hashes.toml");
@@ -67,9 +66,8 @@ pub fn handle(matches: &ArgMatches, config: DumperSection) {
         if let Some(hash) = movie.find_hash() {
             if let Some(rom) = cache.search(&hash) {
                 prepared.push((movie, rom));
-            } else if let Some(over) = matches.value_of("override") {
-                let local = matches.value_of("local").unwrap();
-                if movie.path == PathBuf::from(local).canonicalize().unwrap() {
+            } else if let Some(over) = args.local_override.as_ref() {
+                if movie.path == args.local.as_ref().unwrap().canonicalize().unwrap() {
                     prepared.push((movie, Rom::with_path(over).remove(0)));
                     info!("Using override");
                 }
