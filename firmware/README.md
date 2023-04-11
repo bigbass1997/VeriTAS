@@ -8,8 +8,6 @@ While this is uncommon for Rust projects, in this situation, it is prefered. The
 multiple instances of any given system, and it eases multi-core tasks such as refilling input buffers. It
 also elliminates a need to pass around mutable references to the state.
 
-Any mutable static variables should be multi-core safe, unless otherwise noted.
-
 ---
 
 #### GPIO Configuration
@@ -24,59 +22,15 @@ offers significantly better usability.
 ---
 
 #### Communication Protocol
-All transactions are initiated by the host computer, using a command-response protocol. All commands are
-1 byte wide, and may be followed by additional data. Given the expected data for the command given,
-the device should always respond with a 1-byte wide response, which may also be followed by additional data.
+All transactions are initiated by the host computer, using a command-response protocol. Each transaction is
+made up of a 4-byte (big-endian) length which notes how large the following payload is. The payload is
+encoded/decoded using the `bincode` [spec](https://github.com/bincode-org/bincode/blob/trunk/docs/spec.md).
+The decoded data can either be a command or response, depending on context. The host always initiates with
+1 command, and expects 1 response. In turn, the device waits for 1 command, and returns 1 response.
 
-If any invalid/unrecognized commands are recieved, the device will return an `Err` response. Any extra data
-sent by the host may cause unexpected behavior!
+Check [comms.rs](src/utilcore/comms.rs#L18-L39) for the available commands and responses.
 
 _(notice: this protocol may change at any time during development)_
-
-##### _Commands:_
-###### 0x01 - SetVeritasMode
-Changes the device's mode. Command byte must be followed by a 1-byte mode ID.
-
-| Mode | ID |
-|------|----|
-| Initial | 0x00 |
-| Idle | 0x01 |
-| ReplayN64 | 0x02 |
-| ReplayNes | 0x03 |
-| ReplayA2600 | 0x04 |
-| ReplayGenesis | 0x05 |
-
-_Invalid ID values will be interpreted as `Idle`._
-
-###### 0x02 - ProvideInput
-Enqueues input data for a specific system. Command byte must be followed by a 1-byte system ID, and then
-the expected input data for that system.
-
-| System | ID | Bytes |
-|--------|----|-------|
-| NES | 0x01 | 2 |
-| N64 | 0x03 | 16 |
-| Genesis | 0x08 | ? |
-| A2600 | 0x09 | ? |
-
-_Invalid ID values will cause an `Err` response._
-
-###### 0x03 - GetStatus
-_not implemented_
-
-Requests the current status of the device, in the form of a `Text` response.
-
-###### 0xAA - Ping
-Ping! Host should recieve a `Pong` response.
-
-##### _Responses:_
-| Name | ID   |
-|----|------|
-| Ok | 0x01 |
-| Text | 0x02 |
-| BufferFull | 0xF0 |
-| Pong | 0x55 |
-| Err | 0x00 |
 
 ---
 
