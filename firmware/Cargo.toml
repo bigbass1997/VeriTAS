@@ -10,7 +10,7 @@ alloc-cortex-m = "0.4"
 embedded-hal = { version = "0.2.7", features = ["unproven"] }
 fugit = "0.3"
 
-defmt = "0.3"
+defmt = "0.3.4"
 defmt-rtt = "0.4"
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 
@@ -25,6 +25,7 @@ pio-proc = "0.2"
 heapless = "0.7"
 usb-device = "0.2.9"
 usbd-serial = "0.1.1"
+bincode = { version = "2.0.0-rc.3", default-features = false, features = ["alloc", "derive"]}
 
 paste = "1.0"
 num_enum = { version = "0.5", default-features = false }

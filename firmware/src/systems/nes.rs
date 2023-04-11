@@ -16,11 +16,9 @@ use crate::VTABLE0;
 pub static mut INPUT_BUFFER: Queue<[u8; 2], 1024> = Queue::new();
 pub static mut REPLAY_STATE: ReplayState = ReplayState::new();
 
-static mut LATCH_FILTER_US: u32 = 8000;
-//static mut LATCH_FILTER_US: u32 = 6;
+pub static mut LATCH_FILTER_US: u32 = 8000;
 static mut OVERREAD: u8 = 1;
 
-static mut LAST_LATCH: u64 = 0;
 static mut ALARM_ACTIVATED: bool = false;
 static mut FRAME_INPUT: [u8; 2] = [0xFF, 0xFF];
 static mut WORKING_INPUT: [u8; 2] = [0xFF, 0xFF];
@@ -131,7 +129,8 @@ pub fn run(delay: &mut Delay) {
     }
 }
 
-#[inline(never)]
+#[link_section = ".ram_code"]
+#[inline(always)]
 unsafe fn latch() {
     if !ALARM_ACTIVATED {
         ALARM_ACTIVATED = true;
@@ -150,12 +149,13 @@ unsafe fn latch() {
     }
 }
 
-#[inline(never)]
+#[link_section = ".ram_code"]
+#[inline(always)]
 unsafe fn clock(cnt: usize) {
     WORKING_INPUT[cnt] <<= 1;
     WORKING_INPUT[cnt] |= OVERREAD;
     
-    delay(190); // CLOCK FILTER
+    delay(160); // CLOCK FILTER
     
     if WORKING_INPUT[cnt] & 0x80 != 0 {
         gpio::set_high(SER[cnt]);
@@ -164,6 +164,7 @@ unsafe fn clock(cnt: usize) {
     }
 }
 
+#[link_section = ".ram_code"]
 extern "C" fn io_irq_bank0_handler() {
     gpio::set_high(PIN_DISPLAY_STROBE3); //debugging
     unsafe {
@@ -171,14 +172,17 @@ extern "C" fn io_irq_bank0_handler() {
         
         if io_bank0.proc0_ints[1].read().gpio3_edge_high().bits() { // LAT
             latch();
+            //FN_LATCH();
             
             io_bank0.intr[1].write(|w| w.gpio3_edge_high().bit(true));
         } else if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
             clock(0);
+            //FN_CLOCK(0);
             
             io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true));
         } else if io_bank0.proc0_ints[1].read().gpio6_edge_low().bits() { // CLK[1]
             clock(1);
+            //FN_CLOCK(1);
             
             io_bank0.intr[1].write(|w| w.gpio6_edge_low().bit(true));
         }
@@ -186,6 +190,7 @@ extern "C" fn io_irq_bank0_handler() {
     gpio::set_low(PIN_DISPLAY_STROBE3); //debugging
 }
 
+#[link_section = ".ram_code"]
 extern "C" fn timer_irq_0_handler() {
     gpio::set_high(PIN_DISPLAY_STROBE2); //debugging
     unsafe {
@@ -196,7 +201,8 @@ extern "C" fn timer_irq_0_handler() {
         
         ALARM_ACTIVATED = false;
         
-        info!("ALARM {:02X} {:02X}", FRAME_INPUT[0], FRAME_INPUT[1]);
+        //info!("ALARM {:02X} {:02X}", FRAME_INPUT[0], FRAME_INPUT[1]);
+        //info!("{:02X} {:02X}", FRAME_INPUT[0], FRAME_INPUT[1]);
         
         (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
     }

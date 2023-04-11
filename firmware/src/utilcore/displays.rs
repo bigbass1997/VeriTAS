@@ -27,11 +27,11 @@ pub enum Port {
     Err = 0xFF,
 }
 
-pub static mut NES_STATE: [u8; 2] = [0xFF, 0xFF];
+//pub static mut NES_STATE: [u8; 2] = [0xFF, 0xFF];
 
 static mut PORT_QUEUES: [Queue<Vec<u8, 8>, 4>; 4] = [Queue::new(), Queue::new(), Queue::new(), Queue::new()];
 
-
+#[link_section = ".ram_code"]
 pub fn set_display<T: Into<Vec<u8, 8>>>(port: Port, data: T) {
     if port == Port::Err {
         return;
@@ -42,17 +42,13 @@ pub fn set_display<T: Into<Vec<u8, 8>>>(port: Port, data: T) {
     }
 }
 
+#[link_section = ".ram_code"]
 pub fn check_displays() {
     for i in 0..4 {
         if let Some(data) = unsafe { PORT_QUEUES[i].dequeue() } {
             write((i as u8).into(), &data);
         }
     }
-    
-    /*unsafe {
-        write(Port::Display0, &[NES_STATE[0] ^ 0xFF]);
-        write(Port::Display1, &[NES_STATE[1] ^ 0xFF]);
-    }*/
 }
 
 pub fn initialize() {

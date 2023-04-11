@@ -12,4 +12,9 @@ SECTIONS {
     {
         KEEP(*(.boot2));
     } > BOOT2
+    
+    .ram_code ORIGIN(RAM) :
+    {
+    	KEEP(*(.ram_code));
+    } > RAM
 } INSERT BEFORE .text;

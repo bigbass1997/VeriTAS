@@ -107,5 +107,15 @@ pub unsafe extern "C" fn main() -> ! {
     let core1 = &mut cores[1];
     let _ = core1.spawn(unsafe { &mut CORE1_STACK.mem }, move || { utilcore::run(usb_bus) }).unwrap();
     
+    // In the event the bus fabric hits a conflict, we want to prioritize core0.
+    // Even though it's only a matter of 1 cycle per conflict, if either core is spinning on a 
+    //   condition, they may be causing many 1 cycle conflicts for the other core.
+    pac.BUSCTRL.bus_priority.write(|w| w
+        .dma_w().bit(false)
+        .dma_r().bit(false)
+        .proc1().bit(false)
+        .proc0().bit(true)
+    );
+    
     replaycore::run(delay);
 }

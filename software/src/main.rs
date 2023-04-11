@@ -68,6 +68,9 @@ pub struct ReplayArgs {
     
     #[arg(long)]
     pub manual: bool,
+    
+    #[arg(long)]
+    pub latch_filter: Option<u32>,
 }
 
 fn main() {

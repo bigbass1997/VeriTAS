@@ -4,10 +4,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 use crossterm::{event, terminal};
 use crossterm::event::{Event, KeyCode};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use serialport::{ClearBuffer, SerialPortType};
 use tasd::spec::{ConsoleType, InputChunk, KEY_CONSOLE_TYPE, KEY_INPUT_CHUNK, KEY_TRANSITION, TasdMovie, Transition};
-use crate::replay::comms::{Device, Response, System, VeritasMode};
+use crate::replay::comms::{Command, Device, Response, System, TransitionData, VeritasMode};
+use crate::replay::comms::Command::{GetStatus, ProvideInput, ProvideTransitions, SetLatchFilter, SetReplayLength, SetReplayMode};
 use crate::ReplayArgs;
 
 mod comms;
@@ -32,46 +33,68 @@ pub fn handle(args: ReplayArgs) {
     let mut dev = Device::new(device_path, 500000, Duration::from_secs(6)).unwrap();
     dev.clear(ClearBuffer::All);
     
-    {
-        let pong = dev.ping();
-        if pong != Response::Pong {
-            error!("Failed to ping device. {:?}", pong);
-            return;
-        }
+    if dev.send_command(Command::Ping) != Response::Pong {
+        panic!("Failed to ping device.");
     }
     
     if args.manual {
         let _stdout = stdout();
         
-        dev.set_replay_mode(VeritasMode::ReplayNes);
+        if dev.send_command(SetReplayMode(VeritasMode::ReplayNes)).is_not_ok() {
+            panic!("Failed to set replay mode");
+        }
+        
+        if dev.send_command(SetLatchFilter(args.latch_filter.unwrap_or(8000))).is_not_ok() {
+            panic!("Failed to set latch filter");
+        }
         
         terminal::enable_raw_mode().unwrap();
         
         loop {
+            let mut input = None;
             match event::read() {
                 Ok(event) => match event {
                     Event::Key(event) => match event.code {
                         KeyCode::Char('q') => break,
                         
-                        KeyCode::Char('z') => { dev.provide_input(System::Nes, &[0x7F, 0xFF]); },
-                        KeyCode::Char('x') => { dev.provide_input(System::Nes, &[0xBF, 0xFF]); },
-                        KeyCode::Char(' ') => { dev.provide_input(System::Nes, &[0xDF, 0xFF]); },
-                        KeyCode::Enter => { dev.provide_input(System::Nes, &[0xEF, 0xFF]); },
-                        KeyCode::Up => { dev.provide_input(System::Nes, &[0xF7, 0xFF]); },
-                        KeyCode::Down => { dev.provide_input(System::Nes, &[0xFB, 0xFF]); },
-                        KeyCode::Left => { dev.provide_input(System::Nes, &[0xFD, 0xFF]); },
-                        KeyCode::Right => { dev.provide_input(System::Nes, &[0xFE, 0xFF]); },
+                        KeyCode::Char('z') => { input = Some([0x7F, 0xFF]); },
+                        KeyCode::Char('x') => { input = Some([0xBF, 0xFF]); },
+                        KeyCode::Char(' ') => { input = Some([0xDF, 0xFF]); },
+                        KeyCode::Enter => { input = Some([0xEF, 0xFF]); },
+                        KeyCode::Up => { input = Some([0xF7, 0xFF]); },
+                        KeyCode::Down => { input = Some([0xFB, 0xFF]); },
+                        KeyCode::Left => { input = Some([0xFD, 0xFF]); },
+                        KeyCode::Right => { input = Some([0xFE, 0xFF]); },
                         _ => ()
                     }
                     _ => ()
                 }
                 Err(_) => ()
             }
+            
+            if let Some(input) = input {
+                let resp = dev.send_command(Command::ProvideInput(System::Nes, input.to_vec()));
+                match resp {
+                    Response::BufferStatus { written, .. } if written == 2 => (),
+                    Response::BufferStatus { written, .. } => {
+                        warn!("Entire input not written {written} vs {}", input.len());
+                    },
+                    _ => {
+                        warn!("Failed to provide input: {resp:?}");
+                    }
+                }
+                
+                /*if dev.send_command(Command::ProvideInput(System::Nes, input.to_vec())).is_not_ok() {
+                    warn!("Failed to provide input");
+                }*/
+            }
         }
         
         terminal::disable_raw_mode().unwrap();
         
-        dev.set_replay_mode(VeritasMode::Idle);
+        if dev.send_command(Command::SetReplayMode(VeritasMode::Idle)).is_not_ok() {
+            panic!("Failed to set replay mode");
+        }
         println!("");
         return;
     }
@@ -82,7 +105,7 @@ pub fn handle(args: ReplayArgs) {
     for trans in &mut transitions {
         trans.index /= 2;
         
-        println!("{trans}");
+        info!("{trans}");
     }
     let inputs: Vec<u8> = {
         let chunks: Vec<&[u8]> = tasd.search_by_key(vec![KEY_INPUT_CHUNK]).iter().map(|packet| packet.as_any().downcast_ref::<InputChunk>().unwrap().inputs.as_slice()).collect();
@@ -93,57 +116,63 @@ pub fn handle(args: ReplayArgs) {
         }
         
         /*for (i, chunk) in inputs.chunks_exact(2).enumerate() {
-            println!("{i:>4}: {:02X} {:02X}", chunk[0], chunk[1]);
+            println!("{:02X} {:02X}", chunk[0], chunk[1]);
         }
         return;*/
         
-        inputs.extend_from_slice(&vec![0xFFu8; 2 * 60 * 60]);
+        //inputs.extend_from_slice(&vec![0xFFu8; 2 * 60 * 60]);
         
         inputs
     };
     
     match console.kind.into() {
         System::Nes => {
+            dev.send_command(SetLatchFilter(args.latch_filter.unwrap_or(8000)));
+            dev.send_command(SetReplayLength((inputs.len() / 2) as u64));
+            dev.send_command(ProvideTransitions(TransitionData::from_vec(transitions)));
+            
+            if let Response::DeviceStatus(text) = dev.send_command(GetStatus) {
+                info!("{text}");
+            } else {
+                warn!("Failed to receive device status");
+            }
+            
             let mut ptr = 0usize;
             let mut has_started = false;
-            let mut prev_empty = 512;
+            let mut prev_empty = 2;
             
-            dev.set_replay_length((inputs.len() / 2) as u32);
-            dev.provide_transitions(transitions);
-            
-            info!("{}", dev.get_status());
-            
-            println!("Prefilling buffer...");
+            info!("Prefilling buffer...");
             while ptr < inputs.len() {
                 let remaining = inputs.len() - ptr;
-                let input = &inputs[ptr..(ptr + max(2, min(prev_empty, min(128, remaining))))];
-                let (res, written, empty_space, system, data) = dev.provide_input(System::Nes, input);
-                ptr += written as usize;
-                prev_empty = empty_space as usize;
+                let input = &inputs[ptr..(ptr + max(2, min(prev_empty, min(16, remaining))))];
                 
-                if system != System::Nes {
-                    warn!("Possible communication error! System doesn't match: (sent) {:?} vs (recv) {:?}", System::Nes, system);
-                }
-                if data != input {
-                    warn!("Possible communication error! Inputs don't match: (sent) {} vs (recv) {}", hex::encode_upper(input), hex::encode_upper(data));
-                }
-                
-                match res {
-                    Response::Ok => (),
-                    Response::BufferFull if !has_started => {
+                if let Response::BufferStatus { written, remaining_space } = dev.send_command(ProvideInput(System::Nes, input.to_vec())) {
+                    ptr += written as usize;
+                    prev_empty = remaining_space as usize;
+                    debug!("written: {written}, remaining_space: {remaining_space}");
+                    
+                    if remaining_space == 0 && !has_started {
                         has_started = true;
                         
-                        let res = dev.set_replay_mode(VeritasMode::ReplayNes);
-                        if res != Response::Ok {
-                            error!("Failed to set replay mode! {:?}", res);
+                        if dev.send_command(SetReplayMode(VeritasMode::ReplayNes)).is_not_ok() {
+                            error!("Failed to set replay mode!");
                             return;
                         }
                         info!("Starting replay.")
-                    },
-                    Response::BufferFull => (),
-                    
-                    _ => warn!("Error occurred while sending inputs: {:?}", res)
+                    } else if remaining_space < 128 && has_started {
+                        std::thread::sleep(Duration::from_millis(2000));
+                    }
+                } else {
+                    error!("Failed to receive buffer status! desync likely!");
                 }
+            }
+            
+            if !has_started {
+                if dev.send_command(SetReplayMode(VeritasMode::ReplayNes)).is_not_ok() {
+                    error!("Failed to set replay mode!");
+                    return;
+                }
+                info!("Starting replay.")
             }
         },
         System::N64 => {

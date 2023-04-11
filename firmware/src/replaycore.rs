@@ -1,11 +1,12 @@
 use alloc::vec::Vec;
+use bincode::{Decode, Encode};
 use cortex_m::asm::nop;
 use cortex_m::delay::Delay;
 use defmt::Format;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use crate::{info, systems};
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, Encode, Decode)]
 #[repr(u8)]
 pub enum VeritasMode {
     Initial = 0x00,

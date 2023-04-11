@@ -1,49 +1,56 @@
 use alloc::{format, vec};
+use alloc::string::String;
+use alloc::vec::Vec;
+use bincode::config::Configuration;
+use bincode::{Decode, Encode};
 use num_enum::{IntoPrimitive, FromPrimitive};
 use rp2040_hal::usb::UsbBus;
 use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::SerialPort;
 use defmt::info;
-use crate::replaycore::{Transition, VERITAS_MODE, VeritasMode};
+use crate::replaycore::{VERITAS_MODE, VeritasMode};
 use crate::systems;
 use crate::systems::nes::REPLAY_STATE;
 
-#[derive(IntoPrimitive, FromPrimitive)]
-#[repr(u8)]
+const BINCODE_CONFIG: Configuration = bincode::config::standard();
+
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub enum Command {
-    SetReplayMode = 0x01,
-    ProvideInput = 0x02,
-    ProvideTransitions = 0x03,
-    SetReplayLength = 0x04,
-    GetStatus = 0x05,
-    
-    Ping = 0xAA,
-    
-    #[num_enum(default)]
-    Invalid = 0x00,
+    ProvideInput(System, Vec<u8>),
+    ProvideTransitions(Vec<TransitionData>),
+    SetReplayMode(VeritasMode),
+    SetReplayLength(u64),
+    SetLatchFilter(u32),
+    GetStatus,
+    Ping,
 }
 
-
-#[derive(IntoPrimitive, FromPrimitive)]
-#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub enum Response {
-    Ok = 0x01,
-    Text = 0x02,
-    BufferFull = 0xF0,
-    
-    Pong = 0x55,
-    
-    #[num_enum(default)]
-    Err = 0x00,
+    Ok,
+    DeviceStatus(String),
+    BufferStatus {
+        written: u16,
+        remaining_space: u16,
+    },
+    Pong,
+    Err,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
+pub struct TransitionData {
+    index: u64,
+    index_kind: u8,
+    transition_kind: u8,
 }
 
 
-#[derive(IntoPrimitive, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode, IntoPrimitive, FromPrimitive)]
 #[repr(u8)]
 pub enum System {
     Nes = 0x01,
-    //Snes = 0x02,
+    Snes = 0x02,
     N64 = 0x03,
     Genesis = 0x08,
     A2600 = 0x09,
@@ -53,9 +60,9 @@ pub enum System {
 
 
 pub struct UsbController<'a> {
-    usb_bus: Option<UsbBusAllocator<UsbBus>>,
-    usb_dev: Option<UsbDevice<'a, UsbBus>>,
-    serial: Option<SerialPort<'a, UsbBus>>
+    pub usb_bus: Option<UsbBusAllocator<UsbBus>>,
+    pub usb_dev: Option<UsbDevice<'a, UsbBus>>,
+    pub serial: Option<SerialPort<'a, UsbBus>>
 }
 impl<'a> UsbController<'a> {
     pub const fn empty() -> Self { Self {
@@ -63,6 +70,35 @@ impl<'a> UsbController<'a> {
         usb_dev: None,
         serial: None
     }}
+    
+    #[link_section = ".ram_code"]
+    pub fn try_recv_command(&mut self) -> Option<Command> {
+        if let Some(len) = self.read_four() {
+            let len = u32::from_be_bytes(len);
+            let mut buf = vec![0u8; len as usize];
+            self.read_blocking(&mut buf);
+            
+            bincode::decode_from_slice(&buf, BINCODE_CONFIG)
+                .ok()
+                .map(|(command, _)| command)
+        } else {
+            None
+        }
+    }
+    
+    #[link_section = ".ram_code"]
+    pub fn send_response(&mut self, resp: Response) {
+        let payload = if let Ok(payload) = bincode::encode_to_vec(resp, BINCODE_CONFIG) {
+            payload
+        } else {
+            return;
+        };
+        
+        let mut data = (payload.len() as u32).to_be_bytes().to_vec();
+        data.extend_from_slice(&payload);
+        
+        self.write_blocking(&data);
+    }
     
     #[inline(always)]
     pub fn poll(&mut self) -> bool {
@@ -75,12 +111,34 @@ impl<'a> UsbController<'a> {
         false
     }
     
+    #[allow(unused)]
     #[inline(always)]
     pub fn read_one(&mut self) -> Option<u8> {
         if let Some(serial) = self.serial.as_mut() {
             let mut buf = [0u8];
             match serial.read(&mut buf) {
                 Ok(count) if count == 1 => return Some(buf[0]),
+                _ => ()
+            }
+        }
+        
+        None
+    }
+    
+    pub fn read_four(&mut self) -> Option<[u8; 4]> {
+        if let Some(serial) = self.serial.as_mut() {
+            let mut buf = [0u8; 4];
+            
+            match serial.read(&mut buf) {
+                Ok(count) if count == 0 => return None,
+                Ok(count) if count < 4 => {
+                    for i in count..4 {
+                        buf[i] = self.read_one_blocking();
+                    }
+                    
+                    return Some(buf);
+                },
+                Ok(_) => return Some(buf),
                 _ => ()
             }
         }
@@ -95,7 +153,7 @@ impl<'a> UsbController<'a> {
         loop {
             match serial.read(&mut buf) {
                 Ok(count) if count == 1 => return buf[0],
-                _ => ()
+                _ => (),
             }
         }
     }
@@ -104,7 +162,6 @@ impl<'a> UsbController<'a> {
     pub fn read_blocking(&mut self, buf: &mut [u8]) {
         let serial = self.serial.as_mut().expect("USB serial not initialized");
         let mut ptr = 0usize;
-        
         while ptr < buf.len() {
             let mut data = [0u8];
             match serial.read(&mut data) {
@@ -117,6 +174,7 @@ impl<'a> UsbController<'a> {
         }
     }
     
+    #[allow(unused)]
     #[inline(always)]
     pub fn write_one_blocking(&mut self, buf: u8) {
         let serial = self.serial.as_mut().expect("USB serial not initialized");
@@ -159,49 +217,37 @@ pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
     }
 }
 
+#[link_section = ".ram_code"]
 pub fn check_usb() {
     unsafe {
         if !USB.poll() {
             return;
         }
         
-        if let Some(cmd) = USB.read_one() {
-            match cmd.into() {
-                Command::SetReplayMode => {
-                    VERITAS_MODE = USB.read_one_blocking().into();
-                    
-                    USB.write_one_blocking(Response::Ok.into());
-                },
-                Command::ProvideInput => {
-                    match USB.read_one_blocking().into() {
+        if let Some(cmd) = USB.try_recv_command() {
+            match cmd {
+                Command::ProvideInput(system, inputs) => {
+                    match system {
                         System::Nes => {
                             use crate::systems::nes::INPUT_BUFFER;
-                            let mut len = [0u8; 2];
-                            USB.read_blocking(&mut len);
-                            let len = u16::from_be_bytes([len[0], len[1]]);
-                            
-                            let mut inputs = vec![0u8; len as usize];
-                            USB.read_blocking(&mut inputs);
                             let mut ptr = 0usize;
-                            let status = loop {
-                                if !INPUT_BUFFER.is_full() {
-                                    if ptr < inputs.len() {
-                                        let input = [inputs[ptr], inputs[ptr + 1]];
-                                        INPUT_BUFFER.enqueue(input).unwrap();
-                                        
-                                        ptr += 2;
-                                    } else {
-                                        break (Response::Ok, ptr as u16, ((INPUT_BUFFER.capacity() - INPUT_BUFFER.len()) * 2) as u16);
-                                    }
-                                } else {
-                                    break (Response::BufferFull, ptr as u16, 0);
-                                }
-                            };
+                            while !INPUT_BUFFER.is_full() && ptr <= inputs.len() - 2 && ptr < (u16::MAX - 1) as usize {
+                                let input = [inputs[ptr], inputs[ptr + 1]];
+                                INPUT_BUFFER.enqueue(input).unwrap();
+                                
+                                ptr += 2;
+                            }
                             
-                            USB.write_blocking(&[&[status.0.into()], status.1.to_be_bytes().as_slice(), status.2.to_be_bytes().as_slice(), &[System::Nes.into()], inputs.as_slice()].concat());
+                            USB.send_response(Response::BufferStatus {
+                                written: ptr as u16,
+                                remaining_space: ((INPUT_BUFFER.capacity() - INPUT_BUFFER.len()) * 2) as u16,
+                            });
+                        },
+                        System::Snes => {
+                            USB.send_response(Response::Err);
                         },
                         System::N64 => {
-                            use crate::systems::n64::INPUT_BUFFER;
+                            /*use crate::systems::n64::INPUT_BUFFER;
                             
                             let mut input = [0u8; 16];
                             USB.read_blocking(&mut input);
@@ -216,44 +262,44 @@ pub fn check_usb() {
                                 Response::Ok
                             } else {
                                 Response::BufferFull
-                            };
+                            };*/
                             
-                            USB.write_blocking(&[&[status.into(), System::N64.into()], input.as_slice()].concat());
+                            USB.send_response(Response::Err);
                         },
                         System::Genesis => {
-                            USB.write_one_blocking(Response::Err.into());
+                            USB.send_response(Response::Err);
                         },
                         System::A2600 => {
-                            USB.write_one_blocking(Response::Err.into());
+                            USB.send_response(Response::Err);
                         },
                         System::Unknown => {
-                            USB.write_one_blocking(Response::Err.into());
+                            USB.send_response(Response::Err);
                         },
                     }
                 },
-                Command::ProvideTransitions => {
-                    let mut count = [0u8; 4];
-                    USB.read_blocking(&mut count);
+                Command::ProvideTransitions(transitions) => {
+                    REPLAY_STATE.transitions.extend(
+                        transitions.into_iter()
+                            .map(|tra| (tra.index as u32, tra.transition_kind.into()))
+                            .inspect(|(index, tra)| { info!("Added {:02X} at {}", u8::from(*tra), index); })
+                    );
                     
-                    for _ in 0..u32::from_be_bytes(count) {
-                        let mut buf = [0u8; 5];
-                        USB.read_blocking(&mut buf);
-                        
-                        let tra: (u32, Transition) = (u32::from_be_bytes(buf[0..4].try_into().unwrap()), buf[4].into());
-                        let u: u8 = tra.1.into();
-                        info!("Added {:02X} at {}", u, tra.0);
-                        REPLAY_STATE.transitions.push(tra);
-                    }
-                    
-                    USB.write_one_blocking(Response::Ok.into());
+                    USB.send_response(Response::Ok);
                 },
-                Command::SetReplayLength => {
-                    let mut length = [0u8; 4];
-                    USB.read_blocking(&mut length);
+                Command::SetReplayMode(mode) => {
+                    VERITAS_MODE = mode;
                     
-                    REPLAY_STATE.index_len = u32::from_be_bytes(length);
+                    USB.send_response(Response::Ok);
+                },
+                Command::SetReplayLength(length) => {
+                    REPLAY_STATE.index_len = length as u32; //TODO handle what happens if length > u32
                     
-                    USB.write_one_blocking(Response::Ok.into());
+                    USB.send_response(Response::Ok);
+                },
+                Command::SetLatchFilter(time) => {
+                    systems::nes::LATCH_FILTER_US = time;
+                    
+                    USB.send_response(Response::Ok);
                 },
                 Command::GetStatus => {
                     let mode = VERITAS_MODE;
@@ -265,16 +311,10 @@ pub fn check_usb() {
                         _ => (0, 0)
                     };
                     
-                    let s = format!("Mode: {:?}, Index: {}/{}", mode, index.0, index.1);
-                    USB.write_blocking(&[&[Response::Text.into()], (s.len() as u32).to_be_bytes().as_slice(), s.as_bytes()].concat());
-                }
-                
+                    USB.send_response(Response::DeviceStatus(format!("Mode: {:?}, Index: {}/{}", mode, index.0, index.1)));
+                },
                 Command::Ping => {
-                    USB.write_one_blocking(Response::Pong.into());
-                }
-                
-                Command::Invalid => {
-                    USB.write_one_blocking(Response::Err.into());
+                    USB.send_response(Response::Pong);
                 },
             }
         }

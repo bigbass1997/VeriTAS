@@ -1,45 +1,67 @@
 use std::io::{Read, Write};
 use std::time::Duration;
-use log::error;
-use num_enum::{IntoPrimitive, FromPrimitive};
+use bincode::{Decode, Encode};
+use bincode::config::Configuration;
+use num_enum::{FromPrimitive, IntoPrimitive};
 use serialport::{ClearBuffer, SerialPort};
 use tasd::spec::Transition;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, FromPrimitive)]
-#[repr(u8)]
+const BINCODE_CONFIG: Configuration = bincode::config::standard();
+
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub enum Command {
-    SetReplayMode = 0x01,
-    ProvideInput = 0x02,
-    ProvideTransitions = 0x03,
-    SetReplayLength = 0x04,
-    GetStatus = 0x05,
-    
-    Ping = 0xAA,
-    
-    #[num_enum(default)]
-    Invalid = 0x00,
+    ProvideInput(System, Vec<u8>),
+    ProvideTransitions(Vec<TransitionData>),
+    SetReplayMode(VeritasMode),
+    SetReplayLength(u64),
+    SetLatchFilter(u32),
+    GetStatus,
+    Ping,
 }
 
-
-#[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, FromPrimitive)]
-#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
 pub enum Response {
-    Ok = 0x01,
-    Text = 0x02,
-    BufferFull = 0xF0,
-    
-    Pong = 0x55,
-    
-    #[num_enum(default)]
-    Err = 0x00,
+    Ok,
+    DeviceStatus(String),
+    BufferStatus {
+        written: u16,
+        remaining_space: u16,
+    },
+    Pong,
+    Err,
+}
+impl Response {
+    pub fn is_not_ok(&self) -> bool {
+        self != &Response::Ok
+    }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Encode, Decode)]
+pub struct TransitionData {
+    index: u64,
+    index_kind: u8,
+    transition_kind: u8,
+}
+impl TransitionData {
+    pub fn from_vec(other: Vec<Transition>) -> Vec<Self> {
+        other.into_iter().map(TransitionData::from).collect()
+    }
+}
+impl From<Transition> for TransitionData {
+    fn from(value: Transition) -> Self {
+        Self {
+            index: value.index,
+            index_kind: value.index_kind,
+            transition_kind: value.transition_kind
+        }
+    }
+}
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Encode, Decode, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum System {
     Nes = 0x01,
-    //Snes = 0x02,
+    Snes = 0x02,
     N64 = 0x03,
     Genesis = 0x08,
     A2600 = 0x09,
@@ -47,11 +69,10 @@ pub enum System {
     Unknown = 0xFF,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, IntoPrimitive, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Encode, Decode)]
 #[repr(u8)]
 pub enum VeritasMode {
     Initial = 0x00,
-    #[num_enum(default)]
     Idle = 0x01,
     ReplayN64 = 0x02,
     ReplayNes = 0x03,
@@ -80,63 +101,30 @@ impl Device {
         })
     }
     
-    pub fn set_replay_mode(&mut self, mode: VeritasMode) -> Response {
-        self.write(&[Command::SetReplayMode.into(), mode.into()]);
+    pub fn send_command(&mut self, command: Command) -> Response {
+        let payload = bincode::encode_to_vec(command, BINCODE_CONFIG).expect("failed to encode command, this should never happen");
         
-        self.read_u8().into()
+        let mut data = (payload.len() as u32).to_be_bytes().to_vec();
+        data.extend_from_slice(&payload);
+        
+        self.write(&data);
+        
+        self.recv_response()
     }
     
-    pub fn provide_input(&mut self, system: System, data: &[u8]) -> (Response, u16, u16, System, Vec<u8>) {
-        self.write(&[&[Command::ProvideInput.into(), system.into()], (data.len() as u16).to_be_bytes().as_slice(), data].concat());
-        let res = self.read(data.len() + 6);
+    fn recv_response(&mut self) -> Response {
+        let len = u32::from_be_bytes(self.read(4).try_into().unwrap());
+        let payload = self.read(len as usize);
+        let (response, _) = bincode::decode_from_slice(&payload, BINCODE_CONFIG).expect("failed to decode response, this should never happen");
         
-        (res[0].into(), u16::from_be_bytes([res[1], res[2]]), u16::from_be_bytes([res[3], res[4]]), res[5].into(), res[6..].to_vec())
+        response
     }
-    
-    pub fn provide_transitions(&mut self, transitions: Vec<Transition>) -> Response {
-        let mut payload = vec![Command::ProvideTransitions.into()];
-        payload.extend_from_slice(&(transitions.len() as u32).to_be_bytes());
-        for packet in transitions {
-            let data = [(packet.index as u32).to_be_bytes().as_slice(), &[packet.transition_kind]].concat();
-            payload.extend_from_slice(&data);
-        }
-        self.write(&payload);
-        
-        self.read_u8().into()
-    }
-    
-    pub fn set_replay_length(&mut self, length: u32) -> Response {
-        self.write(&[&[Command::SetReplayLength.into()], length.to_be_bytes().as_slice()].concat());
-        
-        self.read_u8().into()
-    }
-    
-    pub fn get_status(&mut self) -> String {
-        self.write_u8(Command::GetStatus.into());
-        let res = self.read(5);
-        
-        if Response::from(res[0]) != Response::Text {
-            error!("Invalid GetStatus response!");
-            
-            String::new()
-        } else {
-            let res = self.read(u32::from_be_bytes(res[1..].try_into().unwrap()) as usize);
-            
-            String::from_utf8_lossy(&res).to_string()
-        }
-    }
-    
-    pub fn ping(&mut self) -> Response {
-        self.write_u8(Command::Ping.into());
-        
-        self.read_u8().into()
-    }
-    
     
     pub fn clear(&self, buffer: ClearBuffer) {
         self.inner.clear(buffer).unwrap();
     }
     
+    #[allow(unused)]
     pub fn read_u8(&mut self) -> u8 {
         let mut buf = [0u8];
         self.inner.read_exact(&mut buf).unwrap();
@@ -151,6 +139,7 @@ impl Device {
         buf
     }
     
+    #[allow(unused)]
     pub fn write_u8(&mut self, data: u8) {
         self.inner.write_all(&[data]).unwrap();
     }
