@@ -16,7 +16,7 @@ use crate::VTABLE0;
 pub static mut INPUT_BUFFER: Queue<[u8; 2], 1024> = Queue::new();
 pub static mut REPLAY_STATE: ReplayState = ReplayState::new();
 
-pub static mut LATCH_FILTER_US: u32 = 8000;
+pub static mut LATCH_FILTER_US: u32 = 8000; //TODO: Write a detection procedure to relay to the user what the time between latch and 8th clock is.
 static mut OVERREAD: u8 = 1;
 
 static mut ALARM_ACTIVATED: bool = false;
@@ -56,11 +56,14 @@ pub fn initialize() {
     
     unsafe {
         FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
+        
+        displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
+        displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
     }
 }
 
 fn enable_interrupts() {
-    unsafe {
+    cortex_m::interrupt::free(|_| unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
         
         (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio7_edge_low().bit(true));
@@ -75,23 +78,28 @@ fn enable_interrupts() {
         
         VTABLE0.register_handler(TIMER_IRQ_0 as usize, timer_irq_0_handler);
         
+        (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
+        
         (*TIMER::ptr()).inte.modify(|_, w| w.alarm_0().bit(true));
         (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
-    }
+    });
 }
 
 fn disable_interrupts() {
-    unsafe {
+    cortex_m::interrupt::free(|_| unsafe {
         (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
         (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
         
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio7_edge_low().bit(false)); // CLK[0]
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio6_edge_low().bit(false)); // CLK[1]
+        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio3_edge_high().bit(false)); // LAT
+        
         (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() & 0b1110));
-        (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
         
         while !INPUT_BUFFER.is_empty() {
             INPUT_BUFFER.dequeue().unwrap_or_default();
         }
-    }
+    });
     
     info!("stopped NES replay");
 }
@@ -112,7 +120,7 @@ pub fn run(delay: &mut Delay) {
         delay.delay_ms(50);
         gpio::set_low(RST);
         
-        while gpio::is_high(LAT) { nop(); }
+        delay.delay_ms(5);
         
         enable_interrupts();
         
@@ -155,7 +163,7 @@ unsafe fn clock(cnt: usize) {
     WORKING_INPUT[cnt] <<= 1;
     WORKING_INPUT[cnt] |= OVERREAD;
     
-    delay(160); // CLOCK FILTER
+    delay(200); // CLOCK FILTER
     
     if WORKING_INPUT[cnt] & 0x80 != 0 {
         gpio::set_high(SER[cnt]);
@@ -195,8 +203,12 @@ extern "C" fn timer_irq_0_handler() {
         
         ALARM_ACTIVATED = false;
         
-        //info!("ALARM {:02X} {:02X}", FRAME_INPUT[0], FRAME_INPUT[1]);
-        //info!("{:02X} {:02X}", FRAME_INPUT[0], FRAME_INPUT[1]);
+        if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
+            VERITAS_MODE = VeritasMode::Idle;
+            info!("Replay ended!");
+        } else {
+            REPLAY_STATE.index_cur += 1;
+        }
         
         (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
     }

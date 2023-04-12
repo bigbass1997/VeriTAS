@@ -105,8 +105,7 @@ pub fn handle(args: ReplayArgs) {
     }
     let inputs: Vec<u8> = {
         let chunks: Vec<&[u8]> = tasd.search_by_key(vec![KEY_INPUT_CHUNK]).iter().map(|packet| packet.as_any().downcast_ref::<InputChunk>().unwrap().inputs.as_slice()).collect();
-        let mut inputs = vec![0xFF, 0xFF];
-        //let mut inputs = vec![];
+        let mut inputs = vec![];
         for chunk in chunks {
             inputs.extend_from_slice(chunk);
         }
