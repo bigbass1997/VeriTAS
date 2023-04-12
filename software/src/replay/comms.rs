@@ -15,7 +15,7 @@ pub enum Command {
     SetReplayMode(VeritasMode),
     SetReplayLength(u64),
     SetLatchFilter(u32),
-    GetStatus,
+    GetStatus(System),
     Ping,
 }
 

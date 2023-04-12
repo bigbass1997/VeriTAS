@@ -131,7 +131,7 @@ pub fn handle(args: ReplayArgs) {
             dev.send_command(SetReplayLength((inputs.len() / 2) as u64));
             dev.send_command(ProvideTransitions(TransitionData::from_vec(transitions)));
             
-            if let Response::DeviceStatus(text) = dev.send_command(GetStatus) {
+            if let Response::DeviceStatus(text) = dev.send_command(GetStatus(System::Nes)) {
                 info!("{text}");
             } else {
                 warn!("Failed to receive device status");

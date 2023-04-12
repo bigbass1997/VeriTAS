@@ -22,7 +22,7 @@ pub enum Command {
     SetReplayMode(VeritasMode),
     SetReplayLength(u64),
     SetLatchFilter(u32),
-    GetStatus,
+    GetStatus(System),
     Ping,
 }
 
@@ -301,17 +301,16 @@ pub fn check_usb() {
                     
                     USB.send_response(Response::Ok);
                 },
-                Command::GetStatus => {
-                    let mode = VERITAS_MODE;
-                    let index: (u32, u32) = match mode {
-                        VeritasMode::ReplayNes => (
+                Command::GetStatus(system) => {
+                    let index: (u32, u32) = match system {
+                        System::Nes => (
                             systems::nes::REPLAY_STATE.index_cur,
                             systems::nes::REPLAY_STATE.index_len,
                         ),
                         _ => (0, 0)
                     };
                     
-                    USB.send_response(Response::DeviceStatus(format!("Mode: {:?}, Index: {}/{}", mode, index.0, index.1)));
+                    USB.send_response(Response::DeviceStatus(format!("Mode: {:?}, Index: {}/{}", VERITAS_MODE, index.0, index.1)));
                 },
                 Command::Ping => {
                     USB.send_response(Response::Pong);
