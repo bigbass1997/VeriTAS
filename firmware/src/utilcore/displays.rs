@@ -27,8 +27,6 @@ pub enum Port {
     Err = 0xFF,
 }
 
-//pub static mut NES_STATE: [u8; 2] = [0xFF, 0xFF];
-
 static mut PORT_QUEUES: [Queue<Vec<u8, 8>, 4>; 4] = [Queue::new(), Queue::new(), Queue::new(), Queue::new()];
 
 #[link_section = ".ram_code"]

@@ -166,33 +166,27 @@ unsafe fn clock(cnt: usize) {
 
 #[link_section = ".ram_code"]
 extern "C" fn io_irq_bank0_handler() {
-    gpio::set_high(PIN_DISPLAY_STROBE3); //debugging
     unsafe {
         let io_bank0 = &(*IO_BANK0::ptr());
         
         if io_bank0.proc0_ints[1].read().gpio3_edge_high().bits() { // LAT
             latch();
-            //FN_LATCH();
             
             io_bank0.intr[1].write(|w| w.gpio3_edge_high().bit(true));
         } else if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
             clock(0);
-            //FN_CLOCK(0);
             
             io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true));
         } else if io_bank0.proc0_ints[1].read().gpio6_edge_low().bits() { // CLK[1]
             clock(1);
-            //FN_CLOCK(1);
             
             io_bank0.intr[1].write(|w| w.gpio6_edge_low().bit(true));
         }
     }
-    gpio::set_low(PIN_DISPLAY_STROBE3); //debugging
 }
 
 #[link_section = ".ram_code"]
 extern "C" fn timer_irq_0_handler() {
-    gpio::set_high(PIN_DISPLAY_STROBE2); //debugging
     unsafe {
         FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
         
@@ -206,5 +200,4 @@ extern "C" fn timer_irq_0_handler() {
         
         (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
     }
-    gpio::set_low(PIN_DISPLAY_STROBE2); //debugging
 }

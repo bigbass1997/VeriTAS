@@ -30,7 +30,6 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
         info!("Done with usb");
         
         loop {
-            //comms::check_usb();
             displays::check_displays();
         }
     }
@@ -38,9 +37,5 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
 
 #[link_section = ".ram_code"]
 extern "C" fn usbctrl_irq_handler() {
-    unsafe {
-        crate::gpio::set_high(crate::gpio::PIN_DISPLAY_STROBE2); //debugging
-        comms::check_usb();
-        crate::gpio::set_low(crate::gpio::PIN_DISPLAY_STROBE2); //debugging
-    }
+    comms::check_usb();
 }

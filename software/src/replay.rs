@@ -83,10 +83,6 @@ pub fn handle(args: ReplayArgs) {
                         warn!("Failed to provide input: {resp:?}");
                     }
                 }
-                
-                /*if dev.send_command(Command::ProvideInput(System::Nes, input.to_vec())).is_not_ok() {
-                    warn!("Failed to provide input");
-                }*/
             }
         }
         
@@ -114,13 +110,6 @@ pub fn handle(args: ReplayArgs) {
         for chunk in chunks {
             inputs.extend_from_slice(chunk);
         }
-        
-        /*for (i, chunk) in inputs.chunks_exact(2).enumerate() {
-            println!("{:02X} {:02X}", chunk[0], chunk[1]);
-        }
-        return;*/
-        
-        //inputs.extend_from_slice(&vec![0xFFu8; 2 * 60 * 60]);
         
         inputs
     };
@@ -186,79 +175,4 @@ pub fn handle(args: ReplayArgs) {
         },
         _ => unimplemented!()
     }
-    
-    /*let version = u32::from_be_bytes((&movie[4..8]).try_into().unwrap());
-    let start = if version == 1 || version == 2 { 0x200 } else { 0x400 };
-    let controllers = movie[0x15] as usize;
-    
-    let inputs = {
-        let mut data = Bytes::from(movie[start..].to_vec());
-        let mut inputs: Vec<[u32; 4]> = vec![[0; 4]];
-        
-        while data.has_remaining() {
-            let mut input = [0u32; 4];
-            for i in 0..controllers {
-                input[i] = data.get_u32();
-            }
-            inputs.push(input);
-        }
-        
-        inputs
-    };
-    
-    device.clear(ClearBuffer::All).unwrap_or_default();
-    device.write_all(&[0x02]).unwrap();
-    let mut buf = [0u8];
-    device.read_exact(&mut buf).unwrap();
-    if buf[0] != 0x20 {
-        error!("Unexpected value returned: {:#04X}", buf[0]);
-        return;
-    }
-    info!("Starting");
-    
-    let mut ptr = 0usize;
-    loop {
-        let input = inputs[ptr][0].to_be_bytes();
-        
-        device.write_all(&[0x01, input[0], input[1], input[2], input[3]]).unwrap();
-        let mut buf = [0u8];
-        device.read_exact(&mut buf).unwrap();
-        
-        if buf[0] == 0x01 {
-            ptr += 1;
-        } else {
-            std::thread::sleep(Duration::from_secs(1));
-        }
-        if ptr == inputs.len() {
-            break;
-        }
-    }*/
-    
-    /*device.clear(ClearBuffer::All).unwrap_or_default();
-    device.write_all(&[0x04]).unwrap();
-    let mut buf = [0u8];
-    device.read_exact(&mut buf).unwrap();
-    if buf[0] != 0x40 {
-        error!("Unexpected value returned: {:#04X}", buf[0]);
-        return;
-    }
-    info!("Starting");
-    
-    let mut ptr = 0usize;
-    loop {
-        device.write_all(&[0x03, !movie[ptr], !movie[ptr + 1]]).unwrap();
-        let mut buf = [0u8];
-        device.read_exact(&mut buf).unwrap();
-        
-        if buf[0] == 0x03 {
-            ptr += 2;
-        } else {
-            std::thread::sleep(Duration::from_secs(1));
-        }
-        if ptr == movie.len() {
-            break;
-        }
-    }
-    
-    info!("Buffer filling complete!");*/
 }
