@@ -13,8 +13,17 @@ SECTIONS {
         KEEP(*(.boot2));
     } > BOOT2
     
-    .ram_code ORIGIN(RAM) :
-    {
-    	KEEP(*(.ram_code));
-    } > RAM
 } INSERT BEFORE .text;
+
+SECTIONS {
+	.ram_code ORIGIN(RAM) :
+    {
+    	. = ALIGN(4);
+    	__ram_code_dest_start = .;
+    	KEEP(*(.ram_code));
+    	. = ALIGN(4);
+    	__ram_code_dest_end = .;
+    } > RAM AT > FLASH
+    
+    __ram_code_src_start = LOADADDR(.ram_code);
+} INSERT AFTER .text

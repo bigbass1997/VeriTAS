@@ -20,6 +20,7 @@ use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
 use rp2040_hal::pac::{CorePeripherals, Peripherals};
+use rp2040_hal::rom_data::{memcpy, memcpy44};
 use rp2040_hal::sio::spinlock_reset;
 use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
@@ -48,9 +49,27 @@ static mut CORE1_STACK: Stack<16384> = Stack::new();
 /// Do not use outside of CORE0!
 pub static mut VTABLE0: VectorTable = VectorTable::new();
 
+#[inline(never)]
+pub unsafe fn init_ram_code() {
+    extern "C" {
+        static __ram_code_dest_start: u32;
+        static __ram_code_dest_end: u32;
+        static __ram_code_src_start: u32;
+    }
+    
+    let ptr_dest_start = &__ram_code_dest_start as *const u32;
+    let ptr_dest_end = &__ram_code_dest_end as *const u32;
+    let ptr_src_start = &__ram_code_src_start as *const u32;
+    
+    let length = (ptr_dest_end as u32) - (ptr_dest_start as u32);
+    
+    memcpy44(ptr_dest_start as *mut u32, ptr_src_start, length);
+}
+
 #[export_name = "main"]
 pub unsafe extern "C" fn main() -> ! {
     spinlock_reset();
+    init_ram_code();
     {
         use core::mem::MaybeUninit;
         const HEAP_SIZE: usize = 16384;
