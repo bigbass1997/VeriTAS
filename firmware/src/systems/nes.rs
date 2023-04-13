@@ -59,6 +59,8 @@ pub fn initialize() {
         
         displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
         displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
+        
+        ALARM_ACTIVATED = false;
     }
 }
 
@@ -95,10 +97,6 @@ fn disable_interrupts() {
         (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio3_edge_high().bit(false)); // LAT
         
         (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() & 0b1110));
-        
-        while !INPUT_BUFFER.is_empty() {
-            INPUT_BUFFER.dequeue().unwrap_or_default();
-        }
     });
     
     info!("stopped NES replay");
@@ -129,6 +127,9 @@ pub fn run(delay: &mut Delay) {
         }
         
         disable_interrupts();
+        while !INPUT_BUFFER.is_empty() {
+            INPUT_BUFFER.dequeue().unwrap_or_default();
+        }
         REPLAY_STATE.reset();
         
         gpio::set_low(RST);
