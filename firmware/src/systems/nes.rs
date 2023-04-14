@@ -7,7 +7,7 @@ use rp2040_pac::Interrupt::{IO_IRQ_BANK0, TIMER_IRQ_0};
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
 use crate::hal::gpio;
 use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT, PIN_DISPLAY_STROBE2, PIN_DISPLAY_STROBE3};
-use crate::replaycore::{ReplayState, VERITAS_MODE, VeritasMode};
+use crate::replaycore::{ReplayState, Transition, VERITAS_MODE, VeritasMode};
 use crate::utilcore::displays;
 use crate::utilcore::displays::Port;
 use crate::VTABLE0;
@@ -200,18 +200,34 @@ extern "C" fn io_irq_bank0_handler() {
 #[link_section = ".ram_code"]
 extern "C" fn timer_irq_0_handler() {
     unsafe {
-        FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
-        
-        displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
-        displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
-        
         ALARM_ACTIVATED = false;
         
-        if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
-            VERITAS_MODE = VeritasMode::Idle;
-            info!("Replay ended!");
+        if let Some(tra) = REPLAY_STATE.next_transition() {
+            match tra {
+                Transition::SoftReset => cortex_m::interrupt::free(|_| {
+                    disable_interrupts();
+                    
+                    gpio::set_high(RST);
+                    delay(5332558);
+                    gpio::set_low(RST);
+                    delay(10665);
+                    
+                    enable_interrupts();
+                }),
+                _ => (),
+            }
         } else {
-            REPLAY_STATE.index_cur += 1;
+            FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
+            
+            displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
+            displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
+            
+            if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
+                VERITAS_MODE = VeritasMode::Idle;
+                info!("Replay ended!");
+            } else {
+                REPLAY_STATE.index_cur += 1;
+            }
         }
         
         (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
