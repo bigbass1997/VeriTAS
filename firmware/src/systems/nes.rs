@@ -98,8 +98,6 @@ fn disable_interrupts() {
         
         (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() & 0b1110));
     });
-    
-    info!("stopped NES replay");
 }
 
 
@@ -132,9 +130,14 @@ pub fn run(delay: &mut Delay) {
         }
         REPLAY_STATE.reset();
         
+        displays::set_display(Port::Display0, Vec::from_slice(&[0x00]).unwrap());
+        displays::set_display(Port::Display1, Vec::from_slice(&[0x00]).unwrap());
+        
         gpio::set_low(RST);
         delay.delay_ms(10);
         gpio::set_low(RST_EN);
+        
+        info!("stopped NES replay");
     }
 }
 

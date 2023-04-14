@@ -45,7 +45,7 @@ pub struct EncodeArgs {
 
 #[derive(Debug, Parser)]
 pub struct DumpArgs {
-    #[arg(long, short)]
+    #[arg(long, short, num_args = 1..)]
     pub fetch: Vec<String>,
     #[arg(long)]
     pub local: Option<PathBuf>,

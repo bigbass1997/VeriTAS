@@ -1,6 +1,8 @@
 use std::cmp::{max, min};
 use std::io::stdout;
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use crossterm::{event, terminal};
 use crossterm::event::{Event, KeyCode};
@@ -113,6 +115,12 @@ pub fn handle(args: ReplayArgs) {
         inputs
     };
     
+    let exit_early = Arc::new(AtomicBool::new(false));
+    let exit = exit_early.clone();
+    ctrlc::set_handler(move || {
+        exit.store(true, Ordering::Relaxed);
+    }).expect("Failed to set CTRL+C handler");
+    
     match console.kind.into() {
         System::Nes => {
             dev.send_command(SetLatchFilter(args.latch_filter.unwrap_or(8000)));
@@ -131,6 +139,14 @@ pub fn handle(args: ReplayArgs) {
             
             info!("Prefilling buffer...");
             while ptr < inputs.len() {
+                if exit_early.load(Ordering::Relaxed) {
+                    if dev.send_command(SetReplayMode(VeritasMode::Idle)).is_not_ok() {
+                        error!("Failed to set replay mode!");
+                    }
+                    info!("Exiting..");
+                    break;
+                }
+                
                 let remaining = inputs.len() - ptr;
                 let input = &inputs[ptr..(ptr + max(2, min(prev_empty, min(16, remaining))))];
                 
