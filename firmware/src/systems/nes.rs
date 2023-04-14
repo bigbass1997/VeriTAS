@@ -112,9 +112,11 @@ pub fn run(delay: &mut Delay) {
         
         info!("starting NES replay..");
         
-        gpio::set_high(RST);
-        delay.delay_ms(50);
-        gpio::set_low(RST);
+        if REPLAY_STATE.use_initial_reset {
+            gpio::set_high(RST);
+            delay.delay_ms(50);
+            gpio::set_low(RST);
+        }
         
         delay.delay_ms(5);
         

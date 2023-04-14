@@ -39,6 +39,10 @@ pub fn handle(args: ReplayArgs) {
         panic!("Failed to ping device.");
     }
     
+    if args.disable_reset && dev.send_command(Command::UseInitialReset(false)).is_not_ok() {
+        warn!("Failed to disable initial reset");
+    }
+    
     if args.manual {
         let _stdout = stdout();
         

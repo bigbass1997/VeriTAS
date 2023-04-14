@@ -40,6 +40,7 @@ pub struct ReplayState {
     pub index_cur: u32,
     pub transitions: Vec<(u32, Transition)>,
     pub traptr: usize,
+    pub use_initial_reset: bool,
 }
 impl ReplayState {
     pub const fn new() -> Self { Self {
@@ -47,6 +48,7 @@ impl ReplayState {
         index_cur: 0,
         transitions: Vec::new(),
         traptr: 0,
+        use_initial_reset: true,
     }}
     
     pub fn reset(&mut self) {
@@ -54,6 +56,7 @@ impl ReplayState {
         self.index_cur = 0;
         self.transitions.clear();
         self.traptr = 0;
+        self.use_initial_reset = true;
     }
     
     #[inline(always)]

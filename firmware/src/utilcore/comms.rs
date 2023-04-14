@@ -22,6 +22,7 @@ pub enum Command {
     SetReplayMode(VeritasMode),
     SetReplayLength(u64),
     SetLatchFilter(u32),
+    UseInitialReset(bool),
     GetStatus(System),
     Ping,
 }
@@ -298,6 +299,11 @@ pub fn check_usb() {
                 },
                 Command::SetLatchFilter(time) => {
                     systems::nes::LATCH_FILTER_US = time;
+                    
+                    USB.send_response(Response::Ok);
+                },
+                Command::UseInitialReset(use_reset) => {
+                    REPLAY_STATE.use_initial_reset = use_reset;
                     
                     USB.send_response(Response::Ok);
                 },
