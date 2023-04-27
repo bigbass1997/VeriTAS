@@ -16,7 +16,7 @@ pub enum Command {
     SetReplayLength(u64),
     SetLatchFilter(u32),
     UseInitialReset(bool),
-    GetStatus(System),
+    GetStatus,
     Ping,
 }
 

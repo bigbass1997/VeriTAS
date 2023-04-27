@@ -43,61 +43,117 @@ pub fn handle(args: ReplayArgs) {
         warn!("Failed to disable initial reset");
     }
     
-    if args.manual {
+    if let Some(manual) = args.manual {
         let _stdout = stdout();
         
-        if dev.send_command(SetReplayMode(VeritasMode::ReplayNes)).is_not_ok() {
-            panic!("Failed to set replay mode");
-        }
-        
-        if dev.send_command(SetLatchFilter(args.latch_filter.unwrap_or(8000))).is_not_ok() {
-            panic!("Failed to set latch filter");
-        }
-        
-        terminal::enable_raw_mode().unwrap();
-        
-        loop {
-            let mut input = None;
-            match event::read() {
-                Ok(event) => match event {
-                    Event::Key(event) => match event.code {
-                        KeyCode::Char('q') => break,
-                        
-                        KeyCode::Char('z') => { input = Some([0x7F, 0xFF]); },
-                        KeyCode::Char('x') => { input = Some([0xBF, 0xFF]); },
-                        KeyCode::Char(' ') => { input = Some([0xDF, 0xFF]); },
-                        KeyCode::Enter => { input = Some([0xEF, 0xFF]); },
-                        KeyCode::Up => { input = Some([0xF7, 0xFF]); },
-                        KeyCode::Down => { input = Some([0xFB, 0xFF]); },
-                        KeyCode::Left => { input = Some([0xFD, 0xFF]); },
-                        KeyCode::Right => { input = Some([0xFE, 0xFF]); },
-                        _ => ()
-                    }
-                    _ => ()
+        match manual.to_lowercase().as_str() {
+            "nes" => {
+                if dev.send_command(SetReplayMode(VeritasMode::ReplayNes)).is_not_ok() {
+                    panic!("Failed to set replay mode");
                 }
-                Err(_) => ()
-            }
-            
-            if let Some(input) = input {
-                let resp = dev.send_command(Command::ProvideInput(System::Nes, input.to_vec()));
-                match resp {
-                    Response::BufferStatus { written, .. } if written == 2 => (),
-                    Response::BufferStatus { written, .. } => {
-                        warn!("Entire input not written {written} vs {}", input.len());
-                    },
-                    _ => {
-                        warn!("Failed to provide input: {resp:?}");
+                
+                if dev.send_command(SetLatchFilter(args.latch_filter.unwrap_or(8000))).is_not_ok() {
+                    panic!("Failed to set latch filter");
+                }
+                
+                terminal::enable_raw_mode().unwrap();
+                
+                loop {
+                    let mut input = None;
+                    match event::read() {
+                        Ok(event) => match event {
+                            Event::Key(event) => match event.code {
+                                KeyCode::Char('q') => break,
+                                
+                                KeyCode::Char('z') => { input = Some([0x7F, 0xFF]); },
+                                KeyCode::Char('x') => { input = Some([0xBF, 0xFF]); },
+                                KeyCode::Char(' ') => { input = Some([0xDF, 0xFF]); },
+                                KeyCode::Enter => { input = Some([0xEF, 0xFF]); },
+                                KeyCode::Up => { input = Some([0xF7, 0xFF]); },
+                                KeyCode::Down => { input = Some([0xFB, 0xFF]); },
+                                KeyCode::Left => { input = Some([0xFD, 0xFF]); },
+                                KeyCode::Right => { input = Some([0xFE, 0xFF]); },
+                                _ => ()
+                            }
+                            _ => ()
+                        }
+                        Err(_) => ()
+                    }
+                    
+                    if let Some(input) = input {
+                        let resp = dev.send_command(Command::ProvideInput(System::Nes, input.to_vec()));
+                        match resp {
+                            Response::BufferStatus { written, .. } if written == 2 => (),
+                            Response::BufferStatus { written, .. } => {
+                                warn!("Entire input not written {written} vs {}", input.len());
+                            },
+                            _ => {
+                                warn!("Failed to provide input: {resp:?}");
+                            }
+                        }
                     }
                 }
-            }
+                
+                terminal::disable_raw_mode().unwrap();
+                
+                if dev.send_command(Command::SetReplayMode(VeritasMode::Idle)).is_not_ok() {
+                    panic!("Failed to set replay mode");
+                }
+                println!("");
+            },
+            "gen" | "genesis" | "md" | "megadrive" => {
+                if dev.send_command(SetReplayMode(VeritasMode::ReplayGenesis)).is_not_ok() {
+                    panic!("Failed to set replay mode");
+                }
+                
+                terminal::enable_raw_mode().unwrap();
+                
+                loop {
+                    let mut input: Option<&'static [u8]> = None;
+                    match event::read() {
+                        Ok(event) => match event {
+                            Event::Key(event) => match event.code {
+                                KeyCode::Char('q') => break,
+                                
+                                KeyCode::Char('z') => { input = Some(&[0x7F, 0xFF, 0xFF, 0xFF]); }, // A
+                                KeyCode::Char('x') => { input = Some(&[0xFD, 0xFF, 0xFF, 0xFF]); }, // B
+                                KeyCode::Char('c') => { input = Some(&[0xFE, 0xFF, 0xFF, 0xFF]); }, // C
+                                KeyCode::Enter => { input = Some(&[0xBF, 0xFF, 0xFF, 0xFF]); }, // START
+                                KeyCode::Up => { input = Some(&[0xDF, 0xFF, 0xFF, 0xFF]); },
+                                KeyCode::Down => { input = Some(&[0xEF, 0xFF, 0xFF, 0xFF]); },
+                                KeyCode::Left => { input = Some(&[0xF7, 0xFF, 0xFF, 0xFF]); },
+                                KeyCode::Right => { input = Some(&[0xFB, 0xFF, 0xFF, 0xFF]); },
+                                _ => ()
+                            }
+                            _ => ()
+                        }
+                        Err(_) => ()
+                    }
+                    
+                    if let Some(input) = input {
+                        let resp = dev.send_command(Command::ProvideInput(System::Genesis, input.to_vec()));
+                        match resp {
+                            Response::BufferStatus { written, .. } if written == 4 || written == 8 => (),
+                            Response::BufferStatus { written, .. } => {
+                                warn!("Entire input not written {written} vs {}", input.len());
+                            },
+                            _ => {
+                                warn!("Failed to provide input: {resp:?}");
+                            }
+                        }
+                    }
+                }
+                
+                terminal::disable_raw_mode().unwrap();
+                
+                if dev.send_command(Command::SetReplayMode(VeritasMode::Idle)).is_not_ok() {
+                    panic!("Failed to set replay mode");
+                }
+                println!("");
+            },
+            _ => warn!("unrecognized console")
         }
         
-        terminal::disable_raw_mode().unwrap();
-        
-        if dev.send_command(Command::SetReplayMode(VeritasMode::Idle)).is_not_ok() {
-            panic!("Failed to set replay mode");
-        }
-        println!("");
         return;
     }
     
@@ -131,7 +187,7 @@ pub fn handle(args: ReplayArgs) {
             dev.send_command(SetReplayLength((inputs.len() / 2) as u64));
             dev.send_command(ProvideTransitions(TransitionData::from_vec(transitions)));
             
-            if let Response::DeviceStatus(text) = dev.send_command(GetStatus(System::Nes)) {
+            if let Response::DeviceStatus(text) = dev.send_command(GetStatus) {
                 info!("{text}");
             } else {
                 warn!("Failed to receive device status");

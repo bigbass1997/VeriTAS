@@ -9,9 +9,8 @@ use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::SerialPort;
 use defmt::info;
-use crate::replaycore::{VERITAS_MODE, VeritasMode};
+use crate::replaycore::{VERITAS_MODE, REPLAY_STATE, VeritasMode};
 use crate::systems;
-use crate::systems::nes::REPLAY_STATE;
 
 const BINCODE_CONFIG: Configuration = bincode::config::standard();
 
@@ -23,7 +22,7 @@ pub enum Command {
     SetReplayLength(u64),
     SetLatchFilter(u32),
     UseInitialReset(bool),
-    GetStatus(System),
+    GetStatus,
     Ping,
 }
 
@@ -268,7 +267,20 @@ pub fn check_usb() {
                             USB.send_response(Response::Err);
                         },
                         System::Genesis => {
-                            USB.send_response(Response::Err);
+                            use crate::systems::genesis::INPUT_BUFFER;
+                            
+                            let mut ptr = 0usize;
+                            while !INPUT_BUFFER.is_full() && ptr <= inputs.len() - 4 && ptr < (u16::MAX - 1) as usize {
+                                let input = inputs[ptr..(ptr + 4)].try_into().unwrap();
+                                INPUT_BUFFER.enqueue(input).unwrap();
+                                
+                                ptr += 4;
+                            }
+                            
+                            USB.send_response(Response::BufferStatus {
+                                written: ptr as u16,
+                                remaining_space: ((INPUT_BUFFER.capacity() - INPUT_BUFFER.len()) * 4) as u16,
+                            });
                         },
                         System::A2600 => {
                             USB.send_response(Response::Err);
@@ -307,16 +319,8 @@ pub fn check_usb() {
                     
                     USB.send_response(Response::Ok);
                 },
-                Command::GetStatus(system) => {
-                    let index: (u32, u32) = match system {
-                        System::Nes => (
-                            systems::nes::REPLAY_STATE.index_cur,
-                            systems::nes::REPLAY_STATE.index_len,
-                        ),
-                        _ => (0, 0)
-                    };
-                    
-                    USB.send_response(Response::DeviceStatus(format!("Mode: {:?}, Index: {}/{}", VERITAS_MODE, index.0, index.1)));
+                Command::GetStatus => {
+                    USB.send_response(Response::DeviceStatus(format!("Mode: {:?}, Index: {}/{}", VERITAS_MODE, REPLAY_STATE.index_cur, REPLAY_STATE.index_len)));
                 },
                 Command::Ping => {
                     USB.send_response(Response::Pong);

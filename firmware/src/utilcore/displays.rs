@@ -30,13 +30,15 @@ pub enum Port {
 static mut PORT_QUEUES: [Queue<Vec<u8, 8>, 4>; 4] = [Queue::new(), Queue::new(), Queue::new(), Queue::new()];
 
 #[link_section = ".ram_code"]
-pub fn set_display<T: Into<Vec<u8, 8>>>(port: Port, data: T) {
+pub fn set_display(port: Port, data: &[u8]) {
     if port == Port::Err {
         return;
     }
     
+    let data = Vec::from_slice(data).unwrap();
+    
     unsafe {
-        PORT_QUEUES[port as usize].enqueue(data.into()).unwrap_or_default();
+        PORT_QUEUES[port as usize].enqueue(data).unwrap_or_default();
     }
 }
 

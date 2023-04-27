@@ -218,3 +218,12 @@ pub fn set_low(gpio: usize) {
         (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(1 << gpio));
     }
 }
+
+#[inline(always)]
+pub fn set_state(gpio: usize, state: bool) {
+    if state {
+        set_high(gpio);
+    } else {
+        set_low(gpio);
+    }
+}

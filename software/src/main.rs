@@ -67,7 +67,7 @@ pub struct ReplayArgs {
     pub list_devices: bool,
     
     #[arg(long)]
-    pub manual: bool,
+    pub manual: Option<String>,
     
     #[arg(long)]
     pub latch_filter: Option<u32>,

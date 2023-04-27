@@ -2,19 +2,17 @@ use cortex_m::asm::{delay, nop};
 use cortex_m::delay::Delay;
 use defmt::info;
 use heapless::spsc::Queue;
-use heapless::Vec;
 use rp2040_pac::Interrupt::{IO_IRQ_BANK0, TIMER_IRQ_0};
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
 use crate::hal::gpio;
-use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT, PIN_DISPLAY_STROBE2, PIN_DISPLAY_STROBE3};
-use crate::replaycore::{ReplayState, Transition, VERITAS_MODE, VeritasMode};
+use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT};
+use crate::replaycore::{Transition, VERITAS_MODE, REPLAY_STATE, VeritasMode};
 use crate::utilcore::displays;
 use crate::utilcore::displays::Port;
 use crate::VTABLE0;
 
 /// Buffered list of controller inputs. 
 pub static mut INPUT_BUFFER: Queue<[u8; 2], 1024> = Queue::new();
-pub static mut REPLAY_STATE: ReplayState = ReplayState::new();
 
 pub static mut LATCH_FILTER_US: u32 = 8000; //TODO: Write a detection procedure to relay to the user what the time between latch and 8th clock is.
 static mut OVERREAD: u8 = 1;
@@ -32,9 +30,6 @@ const RST_EN: usize = PIN_CNT_18_DIR;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
-    gpio::set_as_output(PIN_DISPLAY_STROBE3, false, false);
-    gpio::set_low(PIN_DISPLAY_STROBE3);
-    
     gpio::set_low(PIN_DETECT);
     gpio::set_as_input(PIN_DETECT, false, true);
     
@@ -57,8 +52,8 @@ pub fn initialize() {
     unsafe {
         FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
         
-        displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
-        displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
+        displays::set_display(Port::Display0, &[FRAME_INPUT[0] ^ 0xFF]);
+        displays::set_display(Port::Display1, &[FRAME_INPUT[1] ^ 0xFF]);
         
         ALARM_ACTIVATED = false;
     }
@@ -132,8 +127,8 @@ pub fn run(delay: &mut Delay) {
         }
         REPLAY_STATE.reset();
         
-        displays::set_display(Port::Display0, Vec::from_slice(&[0x00]).unwrap());
-        displays::set_display(Port::Display1, Vec::from_slice(&[0x00]).unwrap());
+        displays::set_display(Port::Display0, &[0x00]);
+        displays::set_display(Port::Display1, &[0x00]);
         
         gpio::set_low(RST);
         delay.delay_ms(10);
@@ -221,8 +216,8 @@ extern "C" fn timer_irq_0_handler() {
         } else {
             FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
             
-            displays::set_display(Port::Display0, Vec::from_slice(&[FRAME_INPUT[0] ^ 0xFF]).unwrap());
-            displays::set_display(Port::Display1, Vec::from_slice(&[FRAME_INPUT[1] ^ 0xFF]).unwrap());
+            displays::set_display(Port::Display0, &[FRAME_INPUT[0] ^ 0xFF]);
+            displays::set_display(Port::Display1, &[FRAME_INPUT[1] ^ 0xFF]);
             
             if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
                 VERITAS_MODE = VeritasMode::Idle;

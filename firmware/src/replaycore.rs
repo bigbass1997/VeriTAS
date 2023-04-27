@@ -18,9 +18,9 @@ pub enum VeritasMode {
     ReplayGenesis = 0x05,
 }
 use VeritasMode::*;
-use crate::systems::nes::REPLAY_STATE;
 
 pub static mut VERITAS_MODE: VeritasMode = Initial;
+pub static mut REPLAY_STATE: ReplayState = ReplayState::new();
 
 #[derive(Debug, Format, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
@@ -74,19 +74,9 @@ impl ReplayState {
 
 pub fn run(mut delay: Delay) -> ! {
     unsafe {
-        //gpio::set_low(PIN_CNT_18_DIR);
-        //gpio::set_as_output(PIN_CNT_18, true, false); // Console reset (active-high)
         REPLAY_STATE.reset();
         VERITAS_MODE = Idle;
         info!("VeriTAS Ready!");
-        
-        /*gpio::set_high(PIN_CNT_18_DIR);
-        loop {
-            gpio::set_low(PIN_CNT_18);
-            delay.delay_us(100);
-            gpio::set_high(PIN_CNT_18);
-            delay.delay_us(100);
-        }*/
         
         loop {
             match VERITAS_MODE {
@@ -95,7 +85,7 @@ pub fn run(mut delay: Delay) -> ! {
                 ReplayN64 => systems::n64::run(&mut delay),
                 ReplayNes => systems::nes::run(&mut delay),
                 ReplayA2600 => nop(),
-                ReplayGenesis => nop(),
+                ReplayGenesis => systems::genesis::run(&mut delay),
             }
             
             nop();

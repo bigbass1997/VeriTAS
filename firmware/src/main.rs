@@ -1,6 +1,7 @@
 
 #![allow(unused_unsafe)]
 #![feature(alloc_error_handler)]
+#![feature(slice_flatten)]
 #![no_std]
 #![no_main]
 
