@@ -1,3 +1,4 @@
 (sym_lib_table
-  (lib (name "veritas")(type "KiCad")(uri "/home/bigbass/veritas.kicad_sym")(options "")(descr ""))
+  (version 7)
+  (lib (name "veritas")(type "KiCad")(uri "${KIPRJMOD}/veritas.kicad_sym")(options "")(descr ""))
 )
