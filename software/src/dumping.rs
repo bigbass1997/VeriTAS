@@ -74,6 +74,11 @@ pub fn handle(args: DumpArgs, config: DumperSection) {
             } else {
                 warn!("Failed to find matching rom. Expected hash: {}, Movie: {}", hash, movie.source);
             }
+        } else if let Some(over) = args.local_override.as_ref() {
+            if movie.path == args.local.as_ref().unwrap().canonicalize().unwrap() {
+                prepared.push((movie, Rom::with_path(over).remove(0)));
+                info!("Using override");
+            }
         } else {
             warn!("Failed to find movie's rom hash. Skipping: {}", movie.source);
         }
