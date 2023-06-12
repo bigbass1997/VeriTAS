@@ -49,11 +49,25 @@ local MOVIE_TRANSITION  = char(0xFE, 0x05)
 local COMMENT           = char(0xFF, 0x01)
 local UNSPECIFIED       = char(0xFF, 0xFF)
 
+local bit_rshift = nil
+if bit ~= nil and bit.rshift ~= nil then
+	bit_rshift = bit.rshift
+elseif SHIFT ~= nil then
+	bit_rshift = SHIFT
+end
+
+local bit_and = nil
+if bit ~= nil and bit.band ~= nil then
+	bit_and = bit.band
+elseif AND ~= nil then
+	bit_and = AND
+end
+
 function calcExponent(number)
     local exp = 0
     local n = number
     while n ~= 0 do
-        n = bit.rshift(n, 8)
+        n = bit_rshift(n, 8)
         exp = exp + 1
     end
     
@@ -74,8 +88,8 @@ end
 function encodeNumber(value, byteLength)
     local s = ""
     for i = 1, byteLength do
-        s = s..char(bit.band(value, 0xFF))
-        value = bit.rshift(value, 8)
+        s = s..char(bit_and(value, 0xFF))
+        value = bit_rshift(value, 8)
     end
     return string.reverse(s)
 end

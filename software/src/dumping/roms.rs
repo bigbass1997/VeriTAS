@@ -108,16 +108,24 @@ pub enum System {
     Fds,
     N64,
     Atari2600,
+    Genesis,
 }
 impl System {
     pub fn parse(data: &[u8], extension: &str) -> Option<Self> {
         // Check for a magic number
-        if data.len() >= 4 {
-            match data[0..4] {
-                [0x4E, 0x45, 0x53, 0x1A] => return Some(Nes),
-                [0x80, 0x37, 0x12, 0x40] => return Some(N64), // Only applies to official and some homebrew games, in native big-endian format
-                _ => ()
-            }
+        match data.get(0..4) {
+            Some([0x4E, 0x45, 0x53, 0x1A]) => return Some(Nes),
+            Some([0x80, 0x37, 0x12, 0x40]) => return Some(N64), // Only applies to official and some homebrew games, in native big-endian format
+            _ => ()
+        }
+        
+        match data.get(0..15) {
+            Some(b"SEGA MEGA DRIVE") => return Some(Genesis),
+            _ => ()
+        }
+        match data.get(0..12) {
+            Some(b"SEGA GENESIS") => return Some(Genesis),
+            _ => ()
         }
         
         // Check file extension
@@ -126,6 +134,7 @@ impl System {
             "fds" => return Some(Fds),
             "z64" | "n64" => return Some(N64),
             "a26" => return Some(Atari2600),
+            "md" | "gen" => return Some(Genesis),
             _ => ()
         }
         
@@ -150,9 +159,7 @@ impl System {
                     }
                 }
             },
-            Fds => hashes.push(Self::hash(data)),
-            N64 => hashes.push(Self::hash(data)),
-            Atari2600 => hashes.push(Self::hash(data)),
+            Fds | N64 | Atari2600 | Genesis => hashes.push(Self::hash(data)),
         }
         
         hashes

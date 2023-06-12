@@ -25,12 +25,14 @@ pub struct DumperSection {
     pub rom_directory: PathBuf,
     pub fceux_path: PathBuf,
     pub bizhawk_path: PathBuf,
+    pub gens_path: PathBuf,
 }
 impl Default for DumperSection {
     fn default() -> Self { Self {
         rom_directory: PathBuf::from("roms"),
         fceux_path: PathBuf::from(""),
         bizhawk_path: PathBuf::from(""),
+        gens_path: PathBuf::from(""),
     }}
 }
 

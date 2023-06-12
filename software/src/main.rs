@@ -47,12 +47,18 @@ pub struct EncodeArgs {
 pub struct DumpArgs {
     #[arg(long, short, num_args = 1..)]
     pub fetch: Vec<String>,
+    
     #[arg(long)]
     pub local: Option<PathBuf>,
+    
     #[arg(long = "override", value_name = "OVERRIDE")]
     pub local_override: Option<PathBuf>,
+    
     #[arg(long)]
     pub refresh: bool,
+    
+    #[arg(long, hide = true)]
+    pub all: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -113,8 +119,10 @@ fn initialize_cache() {
     create_missing_file("cache/tasd-fceux.lua", include_bytes!("includes/tasd-fceux.lua"));
     create_missing_file("cache/tasd-bizhawk.lua", include_bytes!("includes/tasd-bizhawk.lua"));
     create_missing_file("cache/config-bizhawk.ini", include_bytes!("includes/config-bizhawk.ini"));
+    create_missing_file("cache/tasd-gens.lua", include_bytes!("includes/tasd-gens.lua"));
 }
 
+//TODO: Add checksum, so that it will replace outdated files
 fn create_missing_file<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) {
     let path = path.as_ref();
     if !path.exists() {

@@ -175,6 +175,18 @@ pub fn handle(args: ReplayArgs) {
         inputs
     };
     
+    let ports: [Vec<u8>; 2] = {
+        let chunks: Vec<InputChunk> = tasd.search_by_key(vec![KEY_INPUT_CHUNK]).into_iter().map(|packet| packet.as_any().downcast_ref::<InputChunk>().unwrap().clone()).collect();
+        let mut ports = std::array::from_fn(|_| vec![]);
+        
+        for i in (0..chunks.len()).step_by(1) {
+            let chunk = &chunks[i];
+            ports[chunk.port as usize - 1].extend_from_slice(&chunk.inputs);
+        }
+        
+        ports
+    };
+    
     let exit_early = Arc::new(AtomicBool::new(false));
     let exit = exit_early.clone();
     ctrlc::set_handler(move || {
@@ -243,7 +255,70 @@ pub fn handle(args: ReplayArgs) {
             todo!()
         },
         System::Genesis => {
-            todo!()
+            let mut inputs = vec![];
+            /*for i in (0..ports[0].len()).step_by(2) {
+                inputs.extend_from_slice(&[ports[0][i], ports[0][i + 1], ports[1][i], ports[1][i + 1]]);
+            }*/
+            for i in 0..ports[0].len() {
+                inputs.extend_from_slice(&[ports[0][i], 0xFF, *ports[1].get(i).unwrap_or(&0xFF), 0xFF]);
+                //println!("{:02X?}", &inputs[(inputs.len() - 4)..]);
+            }
+            //return;
+            
+            dev.send_command(SetReplayLength((inputs.len() / 4) as u64));
+            //TODO dev.send_command(ProvideTransitions(TransitionData::from_vec(transitions)));
+            
+            if let Response::DeviceStatus(text) = dev.send_command(GetStatus) {
+                info!("{text}");
+            } else {
+                warn!("Failed to receive device status");
+            }
+            
+            let mut ptr = 0usize;
+            let mut has_started = false;
+            let mut prev_empty = 4;
+            
+            info!("Prefilling buffer...");
+            while ptr < inputs.len() {
+                if exit_early.load(Ordering::Relaxed) {
+                    if dev.send_command(SetReplayMode(VeritasMode::Idle)).is_not_ok() {
+                        error!("Failed to set replay mode!");
+                    }
+                    info!("Exiting..");
+                    break;
+                }
+                
+                let remaining = inputs.len() - ptr;
+                let input = inputs[ptr..(ptr + max(4, min(prev_empty, min(16, remaining))))].to_vec();
+                
+                if let Response::BufferStatus { written, remaining_space } = dev.send_command(ProvideInput(System::Genesis, input)) {
+                    ptr += written as usize;
+                    prev_empty = remaining_space as usize;
+                    debug!("written: {written}, remaining_space: {remaining_space}");
+                    
+                    if remaining_space == 0 && !has_started {
+                        has_started = true;
+                        
+                        if dev.send_command(SetReplayMode(VeritasMode::ReplayGenesis)).is_not_ok() {
+                            error!("Failed to set replay mode!");
+                            return;
+                        }
+                        info!("Starting replay.")
+                    } else if remaining_space < 128 && has_started {
+                        std::thread::sleep(Duration::from_millis(2000));
+                    }
+                } else {
+                    error!("Failed to receive buffer status! desync likely!");
+                }
+            }
+            
+            if !has_started {
+                if dev.send_command(SetReplayMode(VeritasMode::ReplayGenesis)).is_not_ok() {
+                    error!("Failed to set replay mode!");
+                    return;
+                }
+                info!("Starting replay.")
+            }
         },
         System::A2600 => {
             todo!()

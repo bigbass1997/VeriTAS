@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use crossbeam::sync::WaitGroup;
 use log::{info, warn};
+use tasvideos_api_rs::Filter;
 use crate::config::{DumperSection, SaveLoad};
 use crate::DumpArgs;
 use crate::dumping::movies::{Format, Movie, Source};
@@ -8,7 +9,6 @@ use crate::dumping::roms::{Rom, RomCache};
 
 pub mod movies;
 pub mod roms;
-
 
 pub fn handle(args: DumpArgs, config: DumperSection) {
     let mut cache = RomCache::load("cache/hashes.toml");
@@ -129,15 +129,10 @@ pub fn handle(args: DumpArgs, config: DumperSection) {
                     dump_path.set_extension("tasd");
                     
                     if dump_path.is_file() {
-                        //let final_path = PathBuf::from(dump_path.file_name().unwrap());
-                        //let final_path = final_path.canonicalize().unwrap_or(final_path);
-                        //std::fs::write(&final_path, std::fs::read(dump_path).unwrap()).unwrap();
-                        
                         info!("Dump complete! {} {}", dump_path.display(), rom.path.display());
                     } else {
                         warn!("Dump failed! {}", movie.source);
                     }
-                    
                     
                     drop(wg);
                 });
@@ -172,10 +167,76 @@ pub fn handle(args: DumpArgs, config: DumperSection) {
                     
                     drop(wg);
                 });
+            },
+            Format::Gmv => {
+                if !config.gens_path.exists() {
+                    warn!("Gens path is empty or doesn't exist. Skipping: {}", movie.source);
+                    continue;
+                }
+                let mut gens_dir = config.gens_path.clone();
+                gens_dir.pop();
                 
+                let mut api_file = gens_dir.clone();
+                api_file.push("tasd-api.lua");
+                if !api_file.exists() {
+                    copy_into_dir("cache/tasd-api.lua", &gens_dir);
+                }
+                
+                let config = config.clone();
+                let wg = wg.clone();
+                std::thread::spawn(move || {
+                    let script_path = PathBuf::from("cache/tasd-gens.lua");
+                    
+                    copy_into_dir(&rom.path, &gens_dir);
+                    
+                    let mut movie_path = PathBuf::from("cache/movies/");
+                    movie_path.push(movie.path.file_name().unwrap());
+                    
+                    let mut prefix_path = config.gens_path.canonicalize().unwrap();
+                    prefix_path.pop();
+                    prefix_path.push(".wine_prefix/");
+                    if !prefix_path.is_dir() {
+                        std::fs::create_dir(&prefix_path).unwrap();
+                    }
+                    
+                    std::process::Command::new("wine")
+                        .args([
+                            &config.gens_path.display().to_string(),
+                            //"-pause", "0",
+                            "-rom", &rom.path.file_name().unwrap().to_string_lossy(),
+                            "-play", &movie_path.display().to_string(),
+                            "-lua", &script_path.display().to_string()
+                        ])
+                        .env("WINEPREFIX", prefix_path.as_os_str())
+                        .output().unwrap();
+                    
+                    let mut dump_path = movie.path.clone();
+                    dump_path.set_extension("tasd");
+                    
+                    if dump_path.is_file() {
+                        info!("Dump complete! {} {}", dump_path.display(), rom.path.display());
+                    } else {
+                        warn!("Dump failed! {}", movie.source);
+                    }
+                    
+                    drop(wg);
+                });
             },
         }
     }
     
     wg.wait();
+}
+
+
+
+fn copy_into_dir<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to_dir: Q) {
+    if !from.as_ref().is_file() || !to_dir.as_ref().is_dir() {
+        return;
+    }
+    
+    let mut to = to_dir.as_ref().to_path_buf();
+    to.push(from.as_ref().file_name().unwrap());
+    
+    std::fs::copy(from, to).unwrap();
 }

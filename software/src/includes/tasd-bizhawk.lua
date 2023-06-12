@@ -123,7 +123,6 @@ while true do
     if movie.mode() == "FINISHED" or (wasMovieLoaded and movie.mode() == "RECORD") then
         wasMovieLoaded = false
         readyToDump = false
-        finalFrame = false
         client.pause()
         movie.stop()
         handle:close()

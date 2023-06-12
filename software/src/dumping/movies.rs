@@ -14,12 +14,14 @@ use crate::dumping::roms::Hash;
 pub enum Format {
     Bk2,
     Fm2,
+    Gmv,
 }
 impl Format {
     pub fn from_extension<S: AsRef<str>>(ext: S) -> Option<Self> {
         match ext.as_ref().to_lowercase().as_str() {
             "bk2" => Some(Bk2),
             "fm2" => Some(Fm2),
+            "gmv" => Some(Gmv),
             _ => None
         }
     }
@@ -236,6 +238,10 @@ impl Movie {
                     }
                 }
             },
+            Gmv => {
+                // GMV format doesn't store any hashes! :(
+                return None;
+            }
         }
         
         None
