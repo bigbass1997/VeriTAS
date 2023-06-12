@@ -311,6 +311,9 @@ extern "C" fn timer_irq_0_handler() {
                     let inputs = INPUT_BUFFER.dequeue().unwrap_or([0xFF; 4]);
                     LATCHED_INPUT = [[inputs[0], inputs[1]], [inputs[2], inputs[3]]];
                     
+                    displays::set_display(Port::Display0, &[swap_bits(LATCHED_INPUT[0][0] ^ 0xFF, 5, 4), LATCHED_INPUT[0][1] ^ 0xFF]);
+                    displays::set_display(Port::Display1, &[swap_bits(LATCHED_INPUT[1][0] ^ 0xFF, 5, 4), LATCHED_INPUT[1][1] ^ 0xFF]);
+                    
                     //info!("{:02X}", LATCHED_INPUT[0][0]);
                 }
                 
@@ -326,4 +329,11 @@ extern "C" fn timer_irq_0_handler() {
             interrupts::clear_alarm_intr(port);
         }
     }
+}
+
+#[inline(always)]
+fn swap_bits(data: u8, a: usize, b: usize) -> u8 {
+    let x = ((data >> a) ^ (data >> b)) & 1;
+    
+    data ^ ((x << a) | (x << b))
 }
