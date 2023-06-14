@@ -35,16 +35,29 @@ pub enum Source {
     Local(PathBuf),
 }
 impl Source {
-    pub fn parse<S: AsRef<str>>(id_code: S) -> Option<Self> {
-        let id_code = id_code.as_ref().to_uppercase();
-        if id_code.starts_with('#') {
-            let id = id_code[1..].parse().unwrap();
+    /// Attempts to identify what kind of [Source] the text contains.
+    /// 
+    /// Parse order: [Local], [Userfile], [Submission], [Publication]
+    /// 
+    /// For local sources, this only checks if it exists and is a file.
+    pub fn parse<S: AsRef<str>>(text: S) -> Option<Self> {
+        let text = text.as_ref();
+        {
+            let path = Path::new(text);
+            if path.is_file() {
+                return Some(Local(path.to_path_buf()));
+            }
+        }
+        
+        let text = text.to_uppercase();
+        if text.starts_with('#') {
+            let id = text[1..].parse().unwrap();
             
             return Some(Userfile(id));
         }
         
-        let last_char = id_code.chars().last().unwrap();
-        let id = id_code[0..(id_code.len() - 1)].parse().unwrap();
+        let last_char = text.chars().last().unwrap();
+        let id = text[0..(text.len() - 1)].parse().unwrap();
         
         match last_char {
             's' | 'S' => Some(Submission(id)),

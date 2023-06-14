@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 use crossbeam::sync::WaitGroup;
 use log::{info, warn};
-use tasvideos_api_rs::Filter;
 use crate::config::{DumperSection, SaveLoad};
 use crate::DumpArgs;
 use crate::dumping::movies::{Format, Movie, Source};
