@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use log::LevelFilter;
 use crate::config::{SaveLoad, VeritasConfig};
@@ -12,9 +12,6 @@ mod replay;
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Args {
-    #[arg(long, short)]
-    pub config: Option<PathBuf>,
-    
     #[arg(long, short)]
     pub useragent: Option<String>,
     
@@ -38,9 +35,9 @@ pub struct EncodeArgs {
     pub trim: Option<String>,
     
     #[arg(required = true)]
-    pub inputs: Vec<PathBuf>,
+    pub inputs: Vec<Utf8PathBuf>,
     
-    pub output: PathBuf,
+    pub output: Utf8PathBuf,
 }
 
 #[derive(Debug, Parser)]
@@ -48,11 +45,8 @@ pub struct DumpArgs {
     #[arg(long, short, num_args = 1..)]
     pub fetch: Vec<String>,
     
-    #[arg(long)]
-    pub local: Option<PathBuf>,
-    
     #[arg(long = "override", value_name = "OVERRIDE")]
-    pub local_override: Option<PathBuf>,
+    pub rom_override: Option<Utf8PathBuf>,
     
     #[arg(long)]
     pub refresh: bool,
@@ -64,7 +58,7 @@ pub struct DumpArgs {
 #[derive(Debug, Parser)]
 pub struct ReplayArgs {
     #[arg(long, short)]
-    pub movie: Option<PathBuf>,
+    pub movie: Option<Utf8PathBuf>,
     
     #[arg(long, short)]
     pub device: Option<String>,
@@ -85,12 +79,7 @@ pub struct ReplayArgs {
 fn main() {
     let args = Args::parse();
     
-    let mut config = VeritasConfig::load("veritas-default.toml");
-    
-    
-    if let Some(path) = args.config {
-        config = VeritasConfig::load(path);
-    }
+    let config = VeritasConfig::load();
     
     // Setup program-wide logger format
     {
@@ -104,28 +93,7 @@ fn main() {
     
     match args.command {
         Command::Encode(args) => encode::handle(args),
-        Command::Dump(args) => {
-            initialize_cache();
-            dumping::handle(args, config.dumper)
-        },
+        Command::Dump(args) => dumping::handle(args, config.dumper),
         Command::Replay(args) => replay::handle(args),
-    }
-}
-
-fn initialize_cache() {
-    std::fs::create_dir("cache").unwrap_or_default();
-    std::fs::create_dir("cache/movies").unwrap_or_default();
-    create_missing_file("cache/tasd-api.lua", include_bytes!("includes/tasd-api.lua"));
-    create_missing_file("cache/tasd-fceux.lua", include_bytes!("includes/tasd-fceux.lua"));
-    create_missing_file("cache/tasd-bizhawk.lua", include_bytes!("includes/tasd-bizhawk.lua"));
-    create_missing_file("cache/config-bizhawk.ini", include_bytes!("includes/config-bizhawk.ini"));
-    create_missing_file("cache/tasd-gens.lua", include_bytes!("includes/tasd-gens.lua"));
-}
-
-//TODO: Add checksum, so that it will replace outdated files
-fn create_missing_file<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) {
-    let path = path.as_ref();
-    if !path.exists() {
-        std::fs::write(path, contents).unwrap_or_default();
     }
 }

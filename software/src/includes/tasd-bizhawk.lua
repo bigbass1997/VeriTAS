@@ -12,12 +12,19 @@ local playerKeys = {
     {"P2 Right", "P2 Left", "P2 Down", "P2 Up", "P2 Start", "P2 Select", "P2 B", "P2 A"}
 }
 
+if client.getversion() == "2.9" or client.getversion() == "2.9.1" then
+	bit = (require "migration_helpers").EmuHawk_pre_2_9_bit()
+end
+
 package.loaded["tasd-api"] = nil
 _G["tasd-api"] = nil
 --local inspect = require("inspect")
 local api = require("tasd-api")
 
 console.clear()
+
+if client.SetSoundOn ~= nil then client.SetSoundOn(false) end
+if client.speedmode ~= nil then client.speedmode(400) end
 
 function getDumpFilename()
     local _, _, path, filename, ext = string.find(movie.filename(), "(.-)([^\\/]-%.?)([^%.\\/]*)$")
@@ -53,7 +60,7 @@ while true do
         if emu.framecount() == 0 then
             wasMovieLoaded = true
             local filename = getDumpFilename()
-            handle = io.open(filename, "wb+")
+            handle = io.open(filename, "w+b")
             
             if handle == nil then
                 print("Error opening dump file!")

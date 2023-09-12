@@ -202,6 +202,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c59e92b5a388f549b863a7bea62612c09f24c8393560709a54558a9abdfb3b9c"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -536,6 +545,16 @@ name = "dyn-clone"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68b0cf012f1230e43cd00ebb729c6bb58707ecfa8ad08b52ef3a4ccd2697fc30"
+
+[[package]]
+name = "emu-runner"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "adff6d85466b5ee62cf8d81ad14d90c45974ead3d03787fc4c124283b7891118"
+dependencies = [
+ "camino",
+ "sha1_smol",
+]
 
 [[package]]
 name = "encoding_rs"
@@ -1565,6 +1584,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae1a47186c03a32177042e55dbc5fd5aee900b8e0069a8d70fba96a9375cd012"
+
+[[package]]
 name = "sha2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1919,10 +1944,12 @@ dependencies = [
  "base64ct",
  "bincode",
  "bytes",
+ "camino",
  "clap",
  "crossbeam",
  "crossterm 0.26.1",
  "ctrlc",
+ "emu-runner",
  "env_logger",
  "flate2",
  "hex",

@@ -1,13 +1,13 @@
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
 pub trait SaveLoad: Serialize + DeserializeOwned + Default {
-    fn save<P: AsRef<Path>>(&self, path: P) {
-        std::fs::write(path, toml::to_string(&self).unwrap()).unwrap();
+    fn save<P: AsRef<Utf8Path>>(&self, path: P) {
+        std::fs::write(path.as_ref(), toml::to_string(&self).unwrap()).unwrap();
     }
     
-    fn load<P: AsRef<Path>>(path: P) -> Self {
+    fn load<P: AsRef<Utf8Path>>(path: P) -> Self {
         let path = path.as_ref();
         if path.exists() {
             toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
@@ -20,28 +20,34 @@ pub trait SaveLoad: Serialize + DeserializeOwned + Default {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+/// Configuration used for dumping movies.
+/// 
+/// Note: For BizHawk and FCEUX, if the needed emulator version is not available,
+/// or the version is unknown, the first path in each list will be used as the default.
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct DumperSection {
-    pub rom_directory: PathBuf,
-    pub fceux_path: PathBuf,
-    pub bizhawk_path: PathBuf,
-    pub gens_path: PathBuf,
-}
-impl Default for DumperSection {
-    fn default() -> Self { Self {
-        rom_directory: PathBuf::from("roms"),
-        fceux_path: PathBuf::from(""),
-        bizhawk_path: PathBuf::from(""),
-        gens_path: PathBuf::from(""),
-    }}
+    /// Path to directory containing all ROMs usable by VeriTAS. Symlinks and subdirectories will also be searched recursively.
+    pub roms_path: Utf8PathBuf,
+    /// List of paths to BizHawk emulators. Should point to directory containing executable.
+    pub bizhawk_emus: Vec<Utf8PathBuf>,
+    /// List of paths to FCEUX emulators. Should point to directory containing executable.
+    pub fceux_emus: Vec<Utf8PathBuf>,
+    /// Path to Gens emulator. Should point to directory containing executable.
+    pub gens_emu: Utf8PathBuf,
 }
 
-#[derive(Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct VeritasConfig {
+    /// HTTP User-Agent string used in all queries to the TASVideos API.
     pub useragent: String,
     pub dumper: DumperSection,
 }
 impl SaveLoad for VeritasConfig {}
+impl VeritasConfig {
+    pub fn load() -> Self {
+        SaveLoad::load("veritas.toml")
+    }
+}
 
 
 

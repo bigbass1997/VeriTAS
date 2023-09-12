@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::Formatter;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 use log::warn;
 use serde::{Deserialize, Serialize};
 use md5::{Md5, Digest};
@@ -172,7 +172,7 @@ impl System {
 
 #[derive(Clone, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Rom {
-    pub path: PathBuf,
+    pub path: Utf8PathBuf,
     pub system: System,
     #[serde(with = "serde_sha1")]
     pub sha1: [u8; 20],
@@ -180,12 +180,12 @@ pub struct Rom {
     pub md5: [u8; 16],
 }
 impl Rom {
-    pub fn with_path<P: AsRef<Path>>(path: P) -> Vec<Rom> {
+    pub fn with_path<P: AsRef<Utf8Path>>(path: P) -> Vec<Rom> {
         let path = path.as_ref();
         if !path.is_file() { return vec![] }
         
         let data = std::fs::read(path).unwrap();
-        let ext = path.extension().unwrap_or_default().to_string_lossy();
+        let ext = path.extension().unwrap_or_default();
         let system = match System::parse(&data, &ext) {
             Some(system) => system,
             None => return vec![],
@@ -221,9 +221,9 @@ pub struct RomCache {
 }
 impl SaveLoad for RomCache {}
 impl RomCache {
-    pub fn is_fs_outdated<P: AsRef<Path>>(&self, path: P) -> bool {
+    pub fn is_fs_outdated<P: AsRef<Utf8Path>>(&self, path: P) -> bool {
         let path = path.as_ref();
-        let path = path.canonicalize().unwrap_or(path.to_path_buf());
+        let path = path.canonicalize_utf8().unwrap_or(path.to_path_buf());
         let fs: HashSet<String> = Self::walked_dir(path).iter().map(|e| e.path().display().to_string()).collect();
         for found in fs {
             if !self.fs.contains(&found) {
@@ -234,27 +234,27 @@ impl RomCache {
         false
     }
     
-    pub fn refresh<P: AsRef<Path>>(&mut self, path: Option<P>) {
+    pub fn refresh<P: AsRef<Utf8Path>>(&mut self, path: Option<P>) {
         self.roms.retain(|rom| rom.path.is_file());
         
         if let Some(path) = path {
             let path = path.as_ref();
-            let path = path.canonicalize().unwrap_or(path.to_path_buf());
+            let path = path.canonicalize_utf8().unwrap_or(path.to_path_buf());
             if path.is_file() {
-                warn!("Expecting a directory of roms, instead got a single file: {}", path.display());
+                warn!("Expecting a directory of roms, instead got a single file: {path}");
             } else if path.is_dir() {
                 self.fs = Self::walked_dir(path).iter().map(|e| e.path().display().to_string()).collect();
                 for entry in &self.fs {
                     self.roms.extend(Rom::with_path(entry));
                 }
             } else {
-                warn!("Unable to check rom hashes; provided rom directory doesn't exist: {}", path.display());
+                warn!("Unable to check rom hashes; provided rom directory doesn't exist: {path}");
             }
         }
     }
     
-    fn walked_dir<P: AsRef<Path>>(path: P) -> Vec<DirEntry> {
-        WalkDir::new(&path).follow_links(true).into_iter().filter_map(|e| e.ok()).filter(|e| e.path().is_file()).collect()
+    fn walked_dir<P: AsRef<Utf8Path>>(path: P) -> Vec<DirEntry> {
+        WalkDir::new(path.as_ref()).follow_links(true).into_iter().filter_map(|e| e.ok()).filter(|e| e.path().is_file()).collect()
     }
     
     pub fn search(&self, hash: &Hash) -> Option<Rom> {

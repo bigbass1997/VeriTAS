@@ -1,7 +1,7 @@
 use std::fmt::Formatter;
 use std::io::{Cursor, Read};
-use std::path::{Path, PathBuf};
 use base64ct::{Base64, Encoding};
+use camino::{Utf8Path, Utf8PathBuf};
 use flate2::read::GzDecoder;
 use log::warn;
 use zip::ZipArchive;
@@ -10,7 +10,7 @@ use Source::*;
 use crate::dumping::roms::Hash;
 
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Format {
     Bk2,
     Fm2,
@@ -32,7 +32,7 @@ pub enum Source {
     Publication(i32),
     Submission(i32),
     Userfile(u64),
-    Local(PathBuf),
+    Local(Utf8PathBuf),
 }
 impl Source {
     /// Attempts to identify what kind of [Source] the text contains.
@@ -43,7 +43,7 @@ impl Source {
     pub fn parse<S: AsRef<str>>(text: S) -> Option<Self> {
         let text = text.as_ref();
         {
-            let path = Path::new(text);
+            let path = Utf8Path::new(text);
             if path.is_file() {
                 return Some(Local(path.to_path_buf()));
             }
@@ -69,90 +69,89 @@ impl Source {
 impl std::fmt::Display for Source {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Publication(id) => write!(f, "{}M", id),
-            Submission(id) => write!(f, "{}S", id),
-            Userfile(id) => write!(f, "#{}", id),
-            Local(path) => write!(f, "{}", path.display().to_string()),
+            Publication(id) => write!(f, "{id}M"),
+            Submission(id) => write!(f, "{id}S"),
+            Userfile(id) => write!(f, "#{id}"),
+            Local(path) => write!(f, "{path}"),
         }
     }
 }
 
 pub struct Movie {
-    pub path: PathBuf,
+    pub path: Utf8PathBuf,
     pub format: Format,
-    pub source: Source
+    pub source: Source,
 }
 impl Movie {
     pub fn with_source(source: Source) -> Option<Self> {
-        match &source {
+        match source {
             Publication(id) => {
-                let zip = tasvideos_api_rs::get_publication_movie(*id).unwrap();
+                let zip = tasvideos_api_rs::get_publication_movie(id).unwrap();
                 let (data, ext) = Self::extract(zip);
                 
-                let path = PathBuf::from(format!("cache/movies/{}.{}", source, ext));
+                let path = Utf8PathBuf::from(format!("cache/movies/{source}.{ext}"));
                 std::fs::write(&path, data).unwrap();
                 
                 if let Some(format) = Format::from_extension(ext) { 
                     Some(Self {
-                        path: path.canonicalize().unwrap_or(path),
+                        path: path.canonicalize_utf8().unwrap_or(path),
                         format,
                         source,
                     })
                 } else { None }
             },
             Submission(id) => {
-                let zip = tasvideos_api_rs::get_submission_movie(*id).unwrap();
+                let zip = tasvideos_api_rs::get_submission_movie(id).unwrap();
                 let (data, ext) = Self::extract(zip);
                 
-                let path = PathBuf::from(format!("cache/movies/{}.{}", source, ext));
+                let path = Utf8PathBuf::from(format!("cache/movies/{source}.{ext}"));
                 std::fs::write(&path, data).unwrap();
                 
                 
                 if let Some(format) = Format::from_extension(ext) { 
                     Some(Self {
-                        path: path.canonicalize().unwrap_or(path),
+                        path: path.canonicalize_utf8().unwrap_or(path),
                         format,
                         source,
                     })
                 } else { None }
             },
             Userfile(id) => {
-                let (gzip, name) = tasvideos_api_rs::get_userfile(*id).unwrap();
+                let (gzip, name) = tasvideos_api_rs::get_userfile(id).unwrap();
                 let data = Self::deflate(gzip);
                 
                 let filename = match name {
                     Some(name) => {
-                        match Path::new(&name).extension() {
-                            Some(ext) => format!("{}.{}", source.to_string(), ext.to_string_lossy()),
+                        match Utf8Path::new(&name).extension() {
+                            Some(ext) => format!("{source}.{ext}"),
                             None => {
-                                warn!("Userfile has no file extension. File detection will not be possible for: {}", source);
+                                warn!("Userfile has no file extension. File detection will not be possible for: {source}");
                                 source.to_string()
                             },
                         }
                     },
                     None => {
-                        warn!("Unable to locate file extension for Userfile: {}", source);
+                        warn!("Unable to locate file extension for Userfile: {source}");
                         source.to_string()
                     },
                 };
-                let path = PathBuf::from(format!("cache/movies/{}", filename));
+                let path = Utf8PathBuf::from(format!("cache/movies/{filename}"));
                 std::fs::write(&path, data).unwrap();
                 
-                if let Some(format) = Format::from_extension(path.extension().unwrap_or_default().to_string_lossy()) { 
+                if let Some(format) = Format::from_extension(path.extension().unwrap_or_default()) { 
                     Some(Self {
-                        path: path.canonicalize().unwrap_or(path),
+                        path: path.canonicalize_utf8().unwrap_or(path),
                         format,
                         source,
                     })
                 } else { None }
             },
-            Local(path) => {
-                let ext = path.extension().unwrap().to_string_lossy();
-                
+            Local(ref path) => {
+                let ext = path.extension().unwrap();
                 
                 if let Some(format) = Format::from_extension(ext) { 
                     Some(Self {
-                        path: path.to_owned().canonicalize().unwrap_or(path.to_owned()),
+                        path: path.to_owned().canonicalize_utf8().unwrap_or(path.to_owned()),
                         format,
                         source,
                     })

@@ -11,7 +11,7 @@ pub fn handle(args: EncodeArgs) {
     
     if inputs.len() == 1 {
         let result = Command::new("ffmpeg")
-            .args(&["-i", &inputs[0].to_string_lossy(), "-vcodec", "h264", "-preset", "superfast", "-b:v", "12000K", "-acodec", "libmp3lame", "-ac", "1", "-b:a", "160k"])
+            .args(&["-i", inputs[0].as_str(), "-vcodec", "h264", "-preset", "superfast", "-b:v", "12000K", "-acodec", "libmp3lame", "-ac", "1", "-b:a", "160k"])
             .arg(output.as_os_str())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
@@ -20,7 +20,7 @@ pub fn handle(args: EncodeArgs) {
     } else {
         let mut tmp = File::create("tmp.txt").unwrap();
         for input in inputs {
-            writeln!(tmp, "file '{}'", input.to_string_lossy()).unwrap();
+            writeln!(tmp, "file '{input}'").unwrap();
         }
         tmp.flush().unwrap();
         
@@ -36,11 +36,11 @@ pub fn handle(args: EncodeArgs) {
     if output.is_file() && args.trim.is_some() {
         let input = output.clone();
         let ext = input.extension().unwrap();
-        output.set_file_name(format!("{}-trimmed", output.file_stem().unwrap().to_string_lossy()));
+        output.set_file_name(format!("{}-trimmed", output.file_stem().unwrap()));
         output.set_extension(ext);
         
         let result = Command::new("ffmpeg")
-            .args(&["-i", &input.to_string_lossy(), "-to", &args.trim.unwrap(), "-c", "copy"])
+            .args(&["-i", input.as_str(), "-to", &args.trim.unwrap(), "-c", "copy"])
             .arg(output.as_os_str())
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
