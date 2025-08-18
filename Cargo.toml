@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "veritas-cli",
+    "veritas-dump",
+    "veritas-encode",
+    "veritas-replay",
+]
+
+exclude = [ "veritas-firmware" ]

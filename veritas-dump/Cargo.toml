@@ -1,0 +1,20 @@
+[package]
+name = "veritas-dump"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+walkdir = "2.5"
+tasvideos-api-rs = "0.3"
+bincode = "2.0.0-rc.3"
+sha1 = "0.11.0-pre.4"
+md-5 = "0.11.0-pre.4"
+hex = "0.4"
+
+zip = "2.2"
+flate2 = "1.0"
+emu-runner = { version = "0.2.0", path = "/data/projects/emu-runner/" }
+base64ct = { version = "1.6", features = ["alloc"] }
+camino = "1.1"
+
+tracing = "0.1"
