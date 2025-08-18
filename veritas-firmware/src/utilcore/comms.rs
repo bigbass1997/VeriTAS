@@ -10,6 +10,8 @@ use usb_device::class_prelude::UsbBusAllocator;
 use usb_device::prelude::{UsbDevice, UsbDeviceBuilder, UsbVidPid};
 use usbd_serial::SerialPort;
 use defmt::{info, println};
+use usb_device::device::StringDescriptors;
+use usb_device::LangID;
 use crate::replaycore::{VERITAS_MODE, REPLAY_STATE, VeritasMode};
 use crate::systems;
 
@@ -72,38 +74,15 @@ impl<'a> UsbController<'a> {
         serial: None
     }}
     
-    #[link_section = ".ram_code"]
+    #[inline(always)]
     pub fn try_recv_command(&mut self) -> Option<Command> {
-        if let Some(len) = self.read_four() {
-            let len = u32::from_be_bytes(len);
-            let mut buf = vec![0u8; len as usize];
-            self.read_blocking(&mut buf);
-            
-            match bincode::decode_from_slice(&buf, BINCODE_CONFIG) {
-                Ok((command, _)) => Some(command),
-                Err(err) => {
-                    println!("err: {}", err.to_string().as_str());
-                    
-                    None
-                },
-            }
-        } else {
-            None
-        }
+        _try_recv_command(self)
     }
     
-    #[link_section = ".ram_code"]
+    
+    #[inline(always)]
     pub fn send_response(&mut self, resp: Response) {
-        let payload = if let Ok(payload) = bincode::encode_to_vec(resp, BINCODE_CONFIG) {
-            payload
-        } else {
-            return;
-        };
-        
-        let mut data = (payload.len() as u32).to_be_bytes().to_vec();
-        data.extend_from_slice(&payload);
-        
-        self.write_blocking(&data);
+        _send_response(self, resp);
     }
     
     #[inline(always)]
@@ -207,6 +186,40 @@ impl<'a> UsbController<'a> {
     }
 }
 
+#[unsafe(link_section = ".ram_code")]
+fn _try_recv_command(usb: &mut UsbController) -> Option<Command> {
+    if let Some(len) = usb.read_four() {
+        let len = u32::from_be_bytes(len);
+        let mut buf = vec![0u8; len as usize];
+        usb.read_blocking(&mut buf);
+        
+        match bincode::decode_from_slice(&buf, BINCODE_CONFIG) {
+            Ok((command, _)) => Some(command),
+            Err(err) => {
+                println!("err: {}", err.to_string().as_str());
+                
+                None
+            },
+        }
+    } else {
+        None
+    }
+}
+
+#[unsafe(link_section = ".ram_code")]
+fn _send_response(usb: &mut UsbController, resp: Response) {
+    let payload = if let Ok(payload) = bincode::encode_to_vec(resp, BINCODE_CONFIG) {
+        payload
+    } else {
+        return;
+    };
+    
+    let mut data = (payload.len() as u32).to_be_bytes().to_vec();
+    data.extend_from_slice(&payload);
+    
+    usb.write_blocking(&data);
+}
+
 pub static mut USB: UsbController = UsbController::empty();
 
 pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
@@ -214,16 +227,20 @@ pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
         USB.usb_bus = Some(usb_bus);
         USB.serial = Some(SerialPort::new(USB.usb_bus.as_ref().unwrap()));
         USB.usb_dev = Some(UsbDeviceBuilder::new(USB.usb_bus.as_ref().unwrap(), UsbVidPid(0x16C0, 0x27DD))
-            .manufacturer("Bigbass")
-            .product("VeriTAS")
-            .serial_number("VeriTAS") //TODO: provide version number
+            .strings(&[
+                StringDescriptors::new(LangID::EN_US)
+                    .manufacturer("Bigbass")
+                    .product("VeriTAS")
+                    .serial_number("VeriTAS"), //TODO: provide version number
+            ])
+            .expect("valid string descriptors")
             .device_class(2)
             .self_powered(true)
             .build());
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 pub fn check_usb() {
     unsafe {
         if !USB.poll() {

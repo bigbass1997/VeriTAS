@@ -11,7 +11,7 @@ pub mod displays;
 /// Do not use outside of CORE1!
 pub static mut VTABLE1: VectorTable = VectorTable::new();
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
     unsafe {
         // VTABLE1 uses the same PAC, but the Cortex processor handles the underlying addresses
@@ -26,7 +26,7 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
         comms::init_usb(usb_bus);
         
         VTABLE1.register_handler(USBCTRL_IRQ as usize, usbctrl_irq_handler);
-        pac.PPB.nvic_iser.write(|w| w.bits(1 << (USBCTRL_IRQ as u32)));
+        pac.PPB.nvic_iser().write(|w| w.bits(1 << (USBCTRL_IRQ as u32)));
         info!("Done with usb");
         
         loop {
@@ -35,7 +35,7 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 extern "C" fn usbctrl_irq_handler() {
     comms::check_usb();
 }

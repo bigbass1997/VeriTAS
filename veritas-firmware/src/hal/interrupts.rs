@@ -5,14 +5,14 @@ use rp2040_pac::{Interrupt, IO_BANK0, PPB, SIO, TIMER};
 #[inline(always)]
 pub fn enable_nvic(intr: Interrupt) {
     unsafe {
-        (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (intr as u32)));
+        (*PPB::ptr()).nvic_iser().write(|w| w.bits(1 << (intr as u32)));
     }
 }
 
 #[inline(always)]
 pub fn disable_nvic(intr: Interrupt) {
     unsafe {
-        (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (intr as u32)));
+        (*PPB::ptr()).nvic_icer().write(|w| w.bits(1 << (intr as u32)));
     }
 }
 
@@ -41,9 +41,9 @@ pub fn enable_gpio_intr(gpio: usize, edge: Edge) {
         let io = &(*IO_BANK0::ptr());
         
         if cpuid == 0 {
-            io.proc0_inte[gpio >> 3].modify(|r, w| w.bits(r.bits() | gpio_mask(gpio, edge)));
+            io.proc0_inte(gpio >> 3).modify(|r, w| w.bits(r.bits() | gpio_mask(gpio, edge)));
         } else {
-            io.proc1_inte[gpio >> 3].modify(|r, w| w.bits(r.bits() | gpio_mask(gpio, edge)));
+            io.proc1_inte(gpio >> 3).modify(|r, w| w.bits(r.bits() | gpio_mask(gpio, edge)));
         }
     }
 }
@@ -57,9 +57,9 @@ pub fn disable_gpio_intr(gpio: usize, edge: Edge) {
         let mask = 1 << (gpio % 8 * 4 + edge as usize);
         
         if cpuid == 0 {
-            io.proc0_inte[gpio >> 3].modify(|r, w| w.bits(r.bits() & !gpio_mask(gpio, edge)));
+            io.proc0_inte(gpio >> 3).modify(|r, w| w.bits(r.bits() & !gpio_mask(gpio, edge)));
         } else {
-            io.proc1_inte[gpio >> 3].modify(|r, w| w.bits(r.bits() & !gpio_mask(gpio, edge)));
+            io.proc1_inte(gpio >> 3).modify(|r, w| w.bits(r.bits() & !gpio_mask(gpio, edge)));
         }
     }
 }
@@ -67,7 +67,7 @@ pub fn disable_gpio_intr(gpio: usize, edge: Edge) {
 #[inline(always)]
 pub fn clear_gpio_intr(gpio: usize, edge: Edge) {
     unsafe {
-        (*IO_BANK0::ptr()).intr[gpio >> 3].write(|w| w.bits(gpio_mask(gpio, edge)));
+        (*IO_BANK0::ptr()).intr(gpio >> 3).write(|w| w.bits(gpio_mask(gpio, edge)));
     }
 }
 
@@ -78,9 +78,9 @@ pub fn status_gpio_intr(gpio: usize, edge: Edge) -> bool {
         let io = &(*IO_BANK0::ptr());
         
         if cpuid == 0 {
-            io.proc0_ints[gpio >> 3].read().bits() & gpio_mask(gpio, edge) > 0
+            io.proc0_ints(gpio >> 3).read().bits() & gpio_mask(gpio, edge) > 0
         } else {
-            io.proc1_ints[gpio >> 3].read().bits() & gpio_mask(gpio, edge) > 0
+            io.proc1_ints(gpio >> 3).read().bits() & gpio_mask(gpio, edge) > 0
         }
     }
 }
@@ -90,28 +90,28 @@ pub fn status_gpio_intr(gpio: usize, edge: Edge) -> bool {
 #[inline(always)]
 pub fn enable_alarm_intr(alarm: usize) {
     unsafe {
-        (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() | (1 << alarm)));
+        (*TIMER::ptr()).inte().modify(|r, w| w.bits(r.bits() | (1 << alarm)));
     }
 }
 
 #[inline(always)]
 pub fn disable_alarm_intr(alarm: usize) {
     unsafe {
-        (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() & !(1 << alarm)));
+        (*TIMER::ptr()).inte().modify(|r, w| w.bits(r.bits() & !(1 << alarm)));
     }
 }
 
 #[inline(always)]
 pub fn clear_alarm_intr(alarm: usize) {
     unsafe {
-        (*TIMER::ptr()).intr.write(|w| w.bits(1 << alarm));
+        (*TIMER::ptr()).intr().write(|w| w.bits(1 << alarm));
     }
 }
 
 #[inline(always)]
 pub fn status_alarm_intr(alarm: usize) -> bool {
     unsafe {
-        (*TIMER::ptr()).ints.read().bits() & (1 << alarm) > 0
+        (*TIMER::ptr()).ints().read().bits() & (1 << alarm) > 0
     }
 }
 
@@ -119,13 +119,13 @@ pub fn status_alarm_intr(alarm: usize) -> bool {
 pub fn arm_alarm(alarm: usize, duration_us: u32) {
     unsafe {
         let reg = &(*TIMER::ptr());
-        let new_time = || reg.timerawl.read().bits().wrapping_add(duration_us);
+        let new_time = || reg.timerawl().read().bits().wrapping_add(duration_us);
         
         match alarm {
-            0 => reg.alarm0.write(|w| w.bits(new_time())),
-            1 => reg.alarm1.write(|w| w.bits(new_time())),
-            2 => reg.alarm2.write(|w| w.bits(new_time())),
-            3 => reg.alarm3.write(|w| w.bits(new_time())),
+            0 => reg.alarm0().write(|w| w.bits(new_time())),
+            1 => reg.alarm1().write(|w| w.bits(new_time())),
+            2 => reg.alarm2().write(|w| w.bits(new_time())),
+            3 => reg.alarm3().write(|w| w.bits(new_time())),
             _ => ()
         }
     }

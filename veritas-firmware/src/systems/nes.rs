@@ -1,7 +1,6 @@
 use cortex_m::asm::{delay, nop};
 use cortex_m::delay::Delay;
 use defmt::info;
-use heapless::spsc::Queue;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use rp2040_pac::Interrupt::{IO_IRQ_BANK0, TIMER_IRQ_0};
 use rp2040_pac::{IO_BANK0, PPB, TIMER};
@@ -69,35 +68,35 @@ fn enable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
         
-        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio7_edge_low().bit(true));
-        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio6_edge_low().bit(true));
-        (*IO_BANK0::ptr()).intr[1].write(|w| w.gpio3_edge_high().bit(true));
+        (*IO_BANK0::ptr()).intr(1).write(|w| w.gpio7_edge_low().bit(true));
+        (*IO_BANK0::ptr()).intr(1).write(|w| w.gpio6_edge_low().bit(true));
+        (*IO_BANK0::ptr()).intr(1).write(|w| w.gpio3_edge_high().bit(true));
         
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio7_edge_low().bit(true)); // CLK[0]
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio6_edge_low().bit(true)); // CLK[1]
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio3_edge_high().bit(true)); // LAT
-        (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
+        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio7_edge_low().bit(true)); // CLK[0]
+        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio6_edge_low().bit(true)); // CLK[1]
+        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio3_edge_high().bit(true)); // LAT
+        (*PPB::ptr()).nvic_iser().write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
         
         
         VTABLE0.register_handler(TIMER_IRQ_0 as usize, timer_irq_0_handler);
         
-        (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
+        (*TIMER::ptr()).intr().write(|w| w.alarm_0().bit(true));
         
-        (*TIMER::ptr()).inte.modify(|_, w| w.alarm_0().bit(true));
-        (*PPB::ptr()).nvic_iser.write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
+        (*TIMER::ptr()).inte().modify(|_, w| w.alarm_0().bit(true));
+        (*PPB::ptr()).nvic_iser().write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
     });
 }
 
 fn disable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
-        (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
-        (*PPB::ptr()).nvic_icer.write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
+        (*PPB::ptr()).nvic_icer().write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
+        (*PPB::ptr()).nvic_icer().write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
         
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio7_edge_low().bit(false)); // CLK[0]
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio6_edge_low().bit(false)); // CLK[1]
-        (*IO_BANK0::ptr()).proc0_inte[1].modify(|_, w| w.gpio3_edge_high().bit(false)); // LAT
+        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio7_edge_low().bit(false)); // CLK[0]
+        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio6_edge_low().bit(false)); // CLK[1]
+        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio3_edge_high().bit(false)); // LAT
         
-        (*TIMER::ptr()).inte.modify(|r, w| w.bits(r.bits() & 0b1110));
+        (*TIMER::ptr()).inte().modify(|r, w| w.bits(r.bits() & 0b1110));
     });
 }
 
@@ -144,63 +143,67 @@ pub fn run(delay: &mut Delay) {
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 #[inline(always)]
 unsafe fn latch() {
-    if !ALARM_ACTIVATED {
-        ALARM_ACTIVATED = true;
-        (*TIMER::ptr()).alarm0.write(|w| w.bits((*TIMER::ptr()).timerawl.read().bits().wrapping_add(LATCH_FILTER_US)));
-    }
-    
-    WORKING_INPUT = FRAME_INPUT;
-    
-    // set first bit's state
-    for i in 0..2 {
-        if WORKING_INPUT[i] & 0x80 != 0 {
-            gpio::set_high(SER[i]);
-        } else {
-            gpio::set_low(SER[i]);
+    unsafe {
+        if !ALARM_ACTIVATED {
+            ALARM_ACTIVATED = true;
+            (*TIMER::ptr()).alarm0().write(|w| w.bits((*TIMER::ptr()).timerawl().read().bits().wrapping_add(LATCH_FILTER_US)));
+        }
+        
+        WORKING_INPUT = FRAME_INPUT;
+        
+        // set first bit's state
+        for i in 0..2 {
+            if WORKING_INPUT[i] & 0x80 != 0 {
+                gpio::set_high(SER[i]);
+            } else {
+                gpio::set_low(SER[i]);
+            }
         }
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 #[inline(always)]
 unsafe fn clock(cnt: usize) {
-    WORKING_INPUT[cnt] <<= 1;
-    WORKING_INPUT[cnt] |= OVERREAD;
-    
-    delay(200); // CLOCK FILTER
-    
-    if WORKING_INPUT[cnt] & 0x80 != 0 {
-        gpio::set_high(SER[cnt]);
-    } else {
-        gpio::set_low(SER[cnt]);
+    unsafe {
+        WORKING_INPUT[cnt] <<= 1;
+        WORKING_INPUT[cnt] |= OVERREAD;
+        
+        delay(200); // CLOCK FILTER
+        
+        if WORKING_INPUT[cnt] & 0x80 != 0 {
+            gpio::set_high(SER[cnt]);
+        } else {
+            gpio::set_low(SER[cnt]);
+        }
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 extern "C" fn io_irq_bank0_handler() {
     unsafe {
         let io_bank0 = &(*IO_BANK0::ptr());
         
-        if io_bank0.proc0_ints[1].read().gpio3_edge_high().bits() { // LAT
+        if io_bank0.proc0_ints(1).read().gpio3_edge_high().bit() { // LAT
             latch();
             
-            io_bank0.intr[1].write(|w| w.gpio3_edge_high().bit(true));
-        } else if io_bank0.proc0_ints[1].read().gpio7_edge_low().bits() { // CLK[0]
+            io_bank0.intr(1).write(|w| w.gpio3_edge_high().bit(true));
+        } else if io_bank0.proc0_ints(1).read().gpio7_edge_low().bit() { // CLK[0]
             clock(0);
             
-            io_bank0.intr[1].write(|w| w.gpio7_edge_low().bit(true));
-        } else if io_bank0.proc0_ints[1].read().gpio6_edge_low().bits() { // CLK[1]
+            io_bank0.intr(1).write(|w| w.gpio7_edge_low().bit(true));
+        } else if io_bank0.proc0_ints(1).read().gpio6_edge_low().bit() { // CLK[1]
             clock(1);
             
-            io_bank0.intr[1].write(|w| w.gpio6_edge_low().bit(true));
+            io_bank0.intr(1).write(|w| w.gpio6_edge_low().bit(true));
         }
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 extern "C" fn timer_irq_0_handler() {
     unsafe {
         ALARM_ACTIVATED = false;
@@ -234,6 +237,6 @@ extern "C" fn timer_irq_0_handler() {
             }
         }
         
-        (*TIMER::ptr()).intr.write(|w| w.alarm_0().bit(true));
+        (*TIMER::ptr()).intr().write(|w| w.alarm_0().bit(true));
     }
 }

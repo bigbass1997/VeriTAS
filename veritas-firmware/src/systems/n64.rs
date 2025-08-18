@@ -141,7 +141,7 @@ pub fn run(delay: &mut Delay) {
 
 #[inline(always)]
 unsafe fn read_blocking() -> u32 {
-    p::exec(PioSel::Zero, SmSel::Zero, InstructionOperands::JMP { condition: JmpCondition::Always, address: READ_BYTE_VECTOR });
+    p::exec(PioSel::Zero, SmSel::Zero, InstructionOperands::JMP { condition: JmpCondition::Always, address: unsafe { READ_BYTE_VECTOR } });
     
     loop {
         match p::fifo_read(PioSel::Zero, SmSel::Zero) {
@@ -153,7 +153,7 @@ unsafe fn read_blocking() -> u32 {
 
 #[inline(always)]
 unsafe fn write_blocking(data: &[u8]) {
-    p::exec(PioSel::Zero, SmSel::Zero, InstructionOperands::JMP { condition: JmpCondition::Always, address: WRITE_BYTES_VECTOR });
+    p::exec(PioSel::Zero, SmSel::Zero, InstructionOperands::JMP { condition: JmpCondition::Always, address: unsafe { WRITE_BYTES_VECTOR } });
     
     for byte in data {
         let encoded = encode_joybus(*byte);

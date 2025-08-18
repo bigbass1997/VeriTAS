@@ -29,7 +29,7 @@ pub enum Port {
 
 static mut PORT_QUEUES: [Queue<Vec<u8, 8>, 4>; 4] = [Queue::new(), Queue::new(), Queue::new(), Queue::new()];
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 pub fn set_display(port: Port, data: &[u8]) {
     if port == Port::Err {
         return;
@@ -42,7 +42,7 @@ pub fn set_display(port: Port, data: &[u8]) {
     }
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 pub fn check_displays() {
     for i in 0..4 {
         if let Some(data) = unsafe { PORT_QUEUES[i].dequeue() } {

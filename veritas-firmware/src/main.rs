@@ -1,7 +1,8 @@
 
 #![allow(unused_unsafe)]
+#![allow(static_mut_refs)]
+#![deny(unsafe_op_in_unsafe_fn)]
 #![feature(alloc_error_handler)]
-#![feature(slice_flatten)]
 #![no_std]
 #![no_main]
 
@@ -13,7 +14,6 @@ use defmt_rtt as _;
 use fugit::HertzU32;
 use panic_probe as _;
 use rp2040_hal::clocks::{Clock, ClocksManager, ClockSource};
-use rp2040_hal::gpio::pin::bank0::Pins;
 use rp2040_hal::multicore::{Multicore, Stack};
 use rp2040_hal::pll::{PLLConfig, setup_pll_blocking};
 use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
@@ -21,8 +21,9 @@ use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
 use rp2040_hal::pac::{CorePeripherals, Peripherals};
-use rp2040_hal::rom_data::{memcpy, memcpy44};
+use rp2040_hal::rom_data::memcpy44;
 use rp2040_hal::sio::spinlock_reset;
+use rp2040_hal::gpio::Pins;
 use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
 use crate::hal::gpio;
@@ -34,7 +35,7 @@ mod replaycore;
 mod systems;
 mod utilcore;
 
-#[link_section = ".boot2"]
+#[unsafe(link_section = ".boot2")]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
 
@@ -52,25 +53,30 @@ pub static mut VTABLE0: VectorTable = VectorTable::new();
 
 #[inline(never)]
 pub unsafe fn init_ram_code() {
-    extern "C" {
+    unsafe extern "C" {
         static __ram_code_dest_start: u32;
         static __ram_code_dest_end: u32;
         static __ram_code_src_start: u32;
     }
     
-    let ptr_dest_start = &__ram_code_dest_start as *const u32;
-    let ptr_dest_end = &__ram_code_dest_end as *const u32;
-    let ptr_src_start = &__ram_code_src_start as *const u32;
-    
-    let length = (ptr_dest_end as u32) - (ptr_dest_start as u32);
-    
-    memcpy44(ptr_dest_start as *mut u32, ptr_src_start, length);
+    unsafe {
+        let ptr_dest_start = &__ram_code_dest_start as *const u32;
+        let ptr_dest_end = &__ram_code_dest_end as *const u32;
+        let ptr_src_start = &__ram_code_src_start as *const u32;
+        
+        let length = (ptr_dest_end as u32) - (ptr_dest_start as u32);
+        
+        memcpy44(ptr_dest_start as *mut u32, ptr_src_start, length);
+    }
 }
 
-#[export_name = "main"]
+#[unsafe(export_name = "main")]
 pub unsafe extern "C" fn main() -> ! {
-    spinlock_reset();
-    init_ram_code();
+    unsafe {
+        spinlock_reset();
+        init_ram_code();
+    }
+    
     {
         use core::mem::MaybeUninit;
         const HEAP_SIZE: usize = 16384;
@@ -80,8 +86,10 @@ pub unsafe extern "C" fn main() -> ! {
     
     let mut pac = Peripherals::take().unwrap();
     
-    VTABLE0.init(&mut pac.PPB);
-    VTABLE0.activate(&mut pac.PPB);
+    unsafe {
+        VTABLE0.init(&mut pac.PPB);
+        VTABLE0.activate(&mut pac.PPB);
+    }
     
     let mut watchdog = Watchdog::new(pac.WATCHDOG);
     
@@ -125,12 +133,12 @@ pub unsafe extern "C" fn main() -> ! {
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
     let cores = mc.cores();
     let core1 = &mut cores[1];
-    let _ = core1.spawn(unsafe { &mut CORE1_STACK.mem }, move || { utilcore::run(usb_bus) }).unwrap();
+    let _ = core1.spawn(unsafe { CORE1_STACK.take().unwrap() }, move || { utilcore::run(usb_bus) });
     
     // In the event the bus fabric hits a conflict, we want to prioritize core0.
     // Even though it's only a matter of 1 cycle per conflict, if either core is spinning on a 
     //   condition, they may be causing many 1 cycle conflicts for the other core.
-    pac.BUSCTRL.bus_priority.write(|w| w
+    pac.BUSCTRL.bus_priority().write(|w| w
         .dma_w().bit(false)
         .dma_r().bit(false)
         .proc1().bit(false)

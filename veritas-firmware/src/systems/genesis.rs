@@ -57,7 +57,7 @@ fn initialize() {
         gpio::set_as_input(pin, false, false);
     }
     
-    for pin in [UP, DOWN, LEFT_0, RIGHT_0, B_A, C_START].flatten() {
+    for pin in [UP, DOWN, LEFT_0, RIGHT_0, B_A, C_START].as_flattened() {
         gpio::set_as_output(*pin, true, false);
         gpio::set_high(*pin);
     }
@@ -71,8 +71,8 @@ fn initialize() {
         calc_next_edge(1);
         
         let state = calc_state(0, 0, true);
-        (*SIO::ptr()).gpio_out_set.write(|w| w.bits(state.set));
-        (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(state.clr));
+        (*SIO::ptr()).gpio_out_set().write(|w| w.bits(state.set));
+        (*SIO::ptr()).gpio_out_clr().write(|w| w.bits(state.clr));
         
         displays::set_display(Port::Display0, &[LATCHED_INPUT[0][0] ^ 0xFF, LATCHED_INPUT[0][1] ^ 0xFF]);
         displays::set_display(Port::Display1, &[LATCHED_INPUT[1][0] ^ 0xFF, LATCHED_INPUT[1][1] ^ 0xFF]);
@@ -236,7 +236,7 @@ pub fn calc_next_edge(port: usize) {
 const SELECT_EDGE_MASK_0: u32 = (1 << (((SELECT[0] & 0x07) << 2) + Edge::EdgeLow as usize)) | (1 << (((SELECT[0] & 0x07) << 2) + Edge::EdgeHigh as usize));
 //const SELECT_EDGE_MASK_1: u32 = (1 << (((SELECT[1] & 0x07) << 2) + Edge::EdgeLow as usize)) | (1 << (((SELECT[1] & 0x07) << 2) + Edge::EdgeHigh as usize));
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 extern "C" fn io_irq_bank0_handler() {
     //TODO: Change logic to the following:
     //
@@ -250,9 +250,9 @@ extern "C" fn io_irq_bank0_handler() {
     
     //gpio::set_high(gpio::PIN_DISPLAY_STROBE3); // DEBUG
     unsafe {
-        if (*IO_BANK0::ptr()).proc0_ints[SELECT[0] >> 3].read().bits() & SELECT_EDGE_MASK_0 > 0 {
-            (*SIO::ptr()).gpio_out_set.write(|w| w.bits(NEXT_PINS[0].set));
-            (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(NEXT_PINS[0].clr));
+        if (*IO_BANK0::ptr()).proc0_ints(SELECT[0] >> 3).read().bits() & SELECT_EDGE_MASK_0 > 0 {
+            (*SIO::ptr()).gpio_out_set().write(|w| w.bits(NEXT_PINS[0].set));
+            (*SIO::ptr()).gpio_out_clr().write(|w| w.bits(NEXT_PINS[0].clr));
             
             STEPS[0] += 1;
             
@@ -263,8 +263,8 @@ extern "C" fn io_irq_bank0_handler() {
             interrupts::clear_gpio_intr(SELECT[0], Edge::EdgeLow);
             interrupts::clear_gpio_intr(SELECT[0], Edge::EdgeHigh);
         } else { // if not the first port, then must be second, no other GPIO interrupts are used
-            (*SIO::ptr()).gpio_out_set.write(|w| w.bits(NEXT_PINS[1].set));
-            (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(NEXT_PINS[1].clr));
+            (*SIO::ptr()).gpio_out_set().write(|w| w.bits(NEXT_PINS[1].set));
+            (*SIO::ptr()).gpio_out_clr().write(|w| w.bits(NEXT_PINS[1].clr));
             
             STEPS[1] += 1;
             
@@ -300,7 +300,7 @@ extern "C" fn io_irq_bank0_handler() {
     }*/
 }
 
-#[link_section = ".ram_code"]
+#[unsafe(link_section = ".ram_code")]
 extern "C" fn timer_irq_0_handler() {
     for port in 0..=1 {
         if interrupts::status_alarm_intr(port) {
@@ -320,8 +320,8 @@ extern "C" fn timer_irq_0_handler() {
                 //let state = calc_state(0, 0, false);
                 //info!("{}", format!("{state:08X?}").as_str());
                 let state = calc_state(0, 0, true);
-                (*SIO::ptr()).gpio_out_set.write(|w| w.bits(state.set));
-                (*SIO::ptr()).gpio_out_clr.write(|w| w.bits(state.clr));
+                (*SIO::ptr()).gpio_out_set().write(|w| w.bits(state.set));
+                (*SIO::ptr()).gpio_out_clr().write(|w| w.bits(state.clr));
                 
                 calc_next_edge(port);
             }
