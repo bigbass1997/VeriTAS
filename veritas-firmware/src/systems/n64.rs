@@ -4,7 +4,8 @@ use heapless::spsc::Queue;
 use pio_proc::pio_asm;
 use pio::{InstructionOperands, JmpCondition, SetDestination};
 use rp2040_pac::io_bank0::gpio::gpio_ctrl::FUNCSEL_A;
-use crate::hal::{gpio, pio as p};
+use crate::hal::pio as p;
+use crate::hal::gpio::Gpio;
 use crate::hal::pio::{PioSel, ShiftDirection, SmSel};
 use crate::hal::pio::PioOption::{Autopull, ClockDiv, InBase, InShiftdir, OutBase, OutCount, PullThresh, SetBase, SetCount, WrapBottom, WrapTop};
 use crate::replaycore::{VERITAS_MODE, VeritasMode};
@@ -18,21 +19,17 @@ static mut WRITE_BYTES_VECTOR: u8 = 0;
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
     // Data
-    gpio::set_function(14, FUNCSEL_A::PIO0);
-    gpio::set_pull_down_enable(14, false);
-    gpio::set_pull_up_enable(14, false);
+    Gpio(14).set_function(FUNCSEL_A::PIO0)
+        .set_pull_down_enable(false)
+        .set_pull_up_enable(false);
     
     // Debug
-    gpio::set_function(15, FUNCSEL_A::PIO0);
-    gpio::set_pull_down_enable(15, false);
-    gpio::set_pull_up_enable(15, false);
+    Gpio(15).set_function(FUNCSEL_A::PIO0)
+        .set_pull_down_enable(false)
+        .set_pull_up_enable(false);
     
     // Detect
-    gpio::set_function(16, FUNCSEL_A::SIO);
-    gpio::set_pull_down_enable(16, false);
-    gpio::set_pull_up_enable(16, false);
-    gpio::set_input_enable(16, true);
-    gpio::set_output_disable(16, true);
+    Gpio(16).into_input(false, false);
     
     let program = { pio_asm!("
         .origin 0
@@ -113,7 +110,7 @@ pub fn run(delay: &mut Delay) {
         
         info!("starting N64 replay..");
         
-        while gpio::is_low(16) {}
+        while Gpio(16).is_low() {}
         delay.delay_ms(100);
         
         while VERITAS_MODE == VeritasMode::ReplayN64 {

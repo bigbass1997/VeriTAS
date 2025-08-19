@@ -186,7 +186,7 @@ impl<'a> UsbController<'a> {
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 fn _try_recv_command(usb: &mut UsbController) -> Option<Command> {
     if let Some(len) = usb.read_four() {
         let len = u32::from_be_bytes(len);
@@ -206,7 +206,7 @@ fn _try_recv_command(usb: &mut UsbController) -> Option<Command> {
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 fn _send_response(usb: &mut UsbController, resp: Response) {
     let payload = if let Ok(payload) = bincode::encode_to_vec(resp, BINCODE_CONFIG) {
         payload
@@ -240,7 +240,7 @@ pub fn init_usb(usb_bus: UsbBusAllocator<UsbBus>) {
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 pub fn check_usb() {
     unsafe {
         if !USB.poll() {

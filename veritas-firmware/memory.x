@@ -1,6 +1,6 @@
 MEMORY {
     BOOT2 : ORIGIN = 0x10000000, LENGTH = 0x100
-    FLASH : ORIGIN = 0x10000100, LENGTH = 2048K - 0x100
+    FLASH : ORIGIN = 0x10000100, LENGTH = 16384K - 0x100
     RAM   : ORIGIN = 0x20000000, LENGTH = 256K
 }
 
@@ -14,16 +14,3 @@ SECTIONS {
     } > BOOT2
     
 } INSERT BEFORE .text;
-
-SECTIONS {
-	.ram_code ORIGIN(RAM) :
-    {
-    	. = ALIGN(4);
-    	__ram_code_dest_start = .;
-    	KEEP(*(.ram_code));
-    	. = ALIGN(4);
-    	__ram_code_dest_end = .;
-    } > RAM AT > FLASH
-    
-    __ram_code_src_start = LOADADDR(.ram_code);
-} INSERT AFTER .text

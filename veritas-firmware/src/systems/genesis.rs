@@ -4,8 +4,8 @@ use defmt::{info, warn};
 use heapless::spsc::Queue;
 use rp2040_pac::Interrupt::{IO_IRQ_BANK0, TIMER_IRQ_0};
 use rp2040_pac::{IO_BANK0, SIO};
-use crate::hal::{gpio, interrupts};
-use crate::hal::gpio::{PIN_CNT_1, PIN_CNT_10, PIN_CNT_11, PIN_CNT_12, PIN_CNT_13, PIN_CNT_14, PIN_CNT_16, PIN_CNT_2, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_CNT_9, PIN_DETECT};
+use crate::hal::gpio::{Gpio, PIN_CNT_1, PIN_CNT_10, PIN_CNT_11, PIN_CNT_12, PIN_CNT_13, PIN_CNT_14, PIN_CNT_16, PIN_CNT_2, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_CNT_9, PIN_DETECT};
+use crate::hal::interrupts;
 use crate::hal::interrupts::Edge;
 use crate::replaycore::{REPLAY_STATE, VERITAS_MODE, VeritasMode};
 use crate::utilcore::displays;
@@ -28,11 +28,11 @@ impl NextPins {
         }
     }
     
-    pub fn check(&mut self, input: u8, bit: usize, gpio: usize) {
-        if ((((input >> bit) as u32) & 1) << gpio) > 0 {
-            self.set |= 1 << gpio;
+    pub fn check(&mut self, input: u8, bit: usize, gpio: Gpio) {
+        if ((((input >> bit) as u32) & 1) << gpio.0) > 0 {
+            self.set |= 1 << gpio.0;
         } else {
-            self.clr |= 1 << gpio;
+            self.clr |= 1 << gpio.0;
         }
     }
 }
@@ -40,26 +40,23 @@ impl NextPins {
 static mut NEXT_PINS: [NextPins; 2] = [NextPins::new(); 2];
 static mut STEPS: [usize; 2] = [0, 0];
 
-const SELECT: [usize; 2]    = [PIN_CNT_3, PIN_CNT_1]; // CP_18 / CP_24
-const UP: [usize; 2]        = [PIN_CNT_5, PIN_CNT_2]; // CP_8 / CP_25
-const DOWN: [usize; 2]      = [PIN_CNT_7, PIN_CNT_4]; // CP_7 / CP_17
-const LEFT_0: [usize; 2]    = [PIN_CNT_9, PIN_CNT_6]; // CP_6 / CP_16
-const RIGHT_0: [usize; 2]   = [PIN_CNT_11, PIN_CNT_10]; // CP_5 / CP_15
-const B_A: [usize; 2]       = [PIN_CNT_13, PIN_CNT_12]; // CP_4 / CP_14
-const C_START: [usize; 2]   = [PIN_CNT_16, PIN_CNT_14]; // CP_3 / CP_13
+const SELECT: [Gpio; 2]    = [PIN_CNT_3, PIN_CNT_1]; // CP_18 / CP_24
+const UP: [Gpio; 2]        = [PIN_CNT_5, PIN_CNT_2]; // CP_8 / CP_25
+const DOWN: [Gpio; 2]      = [PIN_CNT_7, PIN_CNT_4]; // CP_7 / CP_17
+const LEFT_0: [Gpio; 2]    = [PIN_CNT_9, PIN_CNT_6]; // CP_6 / CP_16
+const RIGHT_0: [Gpio; 2]   = [PIN_CNT_11, PIN_CNT_10]; // CP_5 / CP_15
+const B_A: [Gpio; 2]       = [PIN_CNT_13, PIN_CNT_12]; // CP_4 / CP_14
+const C_START: [Gpio; 2]   = [PIN_CNT_16, PIN_CNT_14]; // CP_3 / CP_13
 
 fn initialize() {
-    gpio::set_low(PIN_DETECT);
-    gpio::set_as_input(PIN_DETECT, false, true);
+    PIN_DETECT.set_low().into_input(false, true);
     
-    for pin in SELECT {
-        gpio::set_low(pin);
-        gpio::set_as_input(pin, false, false);
+    for gpio in SELECT {
+        gpio.set_low().into_input(false, false);
     }
     
-    for pin in [UP, DOWN, LEFT_0, RIGHT_0, B_A, C_START].as_flattened() {
-        gpio::set_as_output(*pin, true, false);
-        gpio::set_high(*pin);
+    for gpio in [UP, DOWN, LEFT_0, RIGHT_0, B_A, C_START].as_flattened() {
+        gpio.into_output(true, false).set_high();
     }
     
     unsafe {
@@ -83,22 +80,22 @@ fn enable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
         
-        for pin in SELECT {
-            interrupts::clear_gpio_intr(pin, Edge::EdgeHigh);
-            interrupts::clear_gpio_intr(pin, Edge::EdgeLow);
+        for gpio in SELECT {
+            gpio.clear_interrupt(Edge::EdgeHigh);
+            gpio.clear_interrupt(Edge::EdgeLow);
             
-            interrupts::enable_gpio_intr(pin, Edge::EdgeHigh);
-            interrupts::enable_gpio_intr(pin, Edge::EdgeLow);
+            gpio.enable_interrupt(Edge::EdgeHigh);
+            gpio.enable_interrupt(Edge::EdgeLow);
         }
         interrupts::enable_nvic(IO_IRQ_BANK0);
         
         
         VTABLE0.register_handler(TIMER_IRQ_0 as usize, timer_irq_0_handler);
         
-        interrupts::clear_alarm_intr(0);
-        interrupts::clear_alarm_intr(1);
-        interrupts::enable_alarm_intr(0);
-        interrupts::enable_alarm_intr(1);
+        interrupts::clear_alarm(0);
+        interrupts::clear_alarm(1);
+        interrupts::enable_alarm(0);
+        interrupts::enable_alarm(1);
         interrupts::enable_nvic(TIMER_IRQ_0);
     });
 }
@@ -108,13 +105,13 @@ fn disable_interrupts() {
         interrupts::disable_nvic(IO_IRQ_BANK0);
         interrupts::disable_nvic(TIMER_IRQ_0);
         
-        for pin in SELECT {
-            interrupts::disable_gpio_intr(pin, Edge::EdgeHigh);
-            interrupts::disable_gpio_intr(pin, Edge::EdgeLow);
+        for gpio in SELECT {
+            gpio.disable_interrupt(Edge::EdgeHigh);
+            gpio.disable_interrupt(Edge::EdgeLow);
         }
         
-        interrupts::disable_alarm_intr(0);
-        interrupts::disable_alarm_intr(1);
+        interrupts::disable_alarm(0);
+        interrupts::disable_alarm(1);
     });
 }
 
@@ -229,14 +226,14 @@ fn calc_state(port: usize, step: usize, edge: bool) -> NextPins {
 #[inline(always)]
 pub fn calc_next_edge(port: usize) {
     unsafe {
-        NEXT_PINS[port] = calc_state(port, STEPS[port] + 1, !gpio::is_high(SELECT[port]));
+        NEXT_PINS[port] = calc_state(port, STEPS[port] + 1, !SELECT[port].is_high());
     }
 }
 
-const SELECT_EDGE_MASK_0: u32 = (1 << (((SELECT[0] & 0x07) << 2) + Edge::EdgeLow as usize)) | (1 << (((SELECT[0] & 0x07) << 2) + Edge::EdgeHigh as usize));
-//const SELECT_EDGE_MASK_1: u32 = (1 << (((SELECT[1] & 0x07) << 2) + Edge::EdgeLow as usize)) | (1 << (((SELECT[1] & 0x07) << 2) + Edge::EdgeHigh as usize));
+const SELECT_EDGE_MASK_0: u32 = (1 << (((SELECT[0].0 & 0x07) << 2) + Edge::EdgeLow as usize)) | (1 << (((SELECT[0].0 & 0x07) << 2) + Edge::EdgeHigh as usize));
+//const SELECT_EDGE_MASK_1: u32 = (1 << (((SELECT[1].0 & 0x07) << 2) + Edge::EdgeLow as usize)) | (1 << (((SELECT[1].0 & 0x07) << 2) + Edge::EdgeHigh as usize));
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 extern "C" fn io_irq_bank0_handler() {
     //TODO: Change logic to the following:
     //
@@ -250,7 +247,7 @@ extern "C" fn io_irq_bank0_handler() {
     
     //gpio::set_high(gpio::PIN_DISPLAY_STROBE3); // DEBUG
     unsafe {
-        if (*IO_BANK0::ptr()).proc0_ints(SELECT[0] >> 3).read().bits() & SELECT_EDGE_MASK_0 > 0 {
+        if (*IO_BANK0::ptr()).proc0_ints(SELECT[0].0 >> 3).read().bits() & SELECT_EDGE_MASK_0 > 0 {
             (*SIO::ptr()).gpio_out_set().write(|w| w.bits(NEXT_PINS[0].set));
             (*SIO::ptr()).gpio_out_clr().write(|w| w.bits(NEXT_PINS[0].clr));
             
@@ -260,8 +257,8 @@ extern "C" fn io_irq_bank0_handler() {
             
             //info!("{:08X}", (*IO_BANK0::ptr()).proc0_ints[SELECT[0] >> 3].read().bits());
             interrupts::arm_alarm(0, 1500);
-            interrupts::clear_gpio_intr(SELECT[0], Edge::EdgeLow);
-            interrupts::clear_gpio_intr(SELECT[0], Edge::EdgeHigh);
+            SELECT[0].clear_interrupt(Edge::EdgeLow);
+            SELECT[0].clear_interrupt(Edge::EdgeHigh);
         } else { // if not the first port, then must be second, no other GPIO interrupts are used
             (*SIO::ptr()).gpio_out_set().write(|w| w.bits(NEXT_PINS[1].set));
             (*SIO::ptr()).gpio_out_clr().write(|w| w.bits(NEXT_PINS[1].clr));
@@ -271,8 +268,8 @@ extern "C" fn io_irq_bank0_handler() {
             calc_next_edge(1);
             
             interrupts::arm_alarm(1, 1500);
-            interrupts::clear_gpio_intr(SELECT[1], Edge::EdgeLow);
-            interrupts::clear_gpio_intr(SELECT[1], Edge::EdgeHigh);
+            SELECT[1].clear_interrupt(Edge::EdgeLow);
+            SELECT[1].clear_interrupt(Edge::EdgeHigh);
         }
     }
     //gpio::set_low(gpio::PIN_DISPLAY_STROBE3); // DEBUG
@@ -300,10 +297,10 @@ extern "C" fn io_irq_bank0_handler() {
     }*/
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 extern "C" fn timer_irq_0_handler() {
     for port in 0..=1 {
-        if interrupts::status_alarm_intr(port) {
+        if interrupts::alarm_status(port) {
             unsafe {
                 STEPS[port] = 0;
                 
@@ -326,7 +323,7 @@ extern "C" fn timer_irq_0_handler() {
                 calc_next_edge(port);
             }
             
-            interrupts::clear_alarm_intr(port);
+            interrupts::clear_alarm(port);
         }
     }
 }

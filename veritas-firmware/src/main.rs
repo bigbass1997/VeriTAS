@@ -16,12 +16,11 @@ use panic_probe as _;
 use rp2040_hal::clocks::{Clock, ClocksManager, ClockSource};
 use rp2040_hal::multicore::{Multicore, Stack};
 use rp2040_hal::pll::{PLLConfig, setup_pll_blocking};
-use rp2040_hal::pll::common_configs::{PLL_USB_48MHZ};
+use rp2040_hal::pll::common_configs::PLL_USB_48MHZ;
 use rp2040_hal::xosc::setup_xosc_blocking;
 use rp2040_hal::{Sio, Watchdog};
 use rp2040_hal::vector_table::VectorTable;
 use rp2040_hal::pac::{CorePeripherals, Peripherals};
-use rp2040_hal::rom_data::memcpy44;
 use rp2040_hal::sio::spinlock_reset;
 use rp2040_hal::gpio::Pins;
 use usb_device::class_prelude::UsbBusAllocator;
@@ -51,30 +50,10 @@ static mut CORE1_STACK: Stack<16384> = Stack::new();
 /// Do not use outside of CORE0!
 pub static mut VTABLE0: VectorTable = VectorTable::new();
 
-#[inline(never)]
-pub unsafe fn init_ram_code() {
-    unsafe extern "C" {
-        static __ram_code_dest_start: u32;
-        static __ram_code_dest_end: u32;
-        static __ram_code_src_start: u32;
-    }
-    
-    unsafe {
-        let ptr_dest_start = &__ram_code_dest_start as *const u32;
-        let ptr_dest_end = &__ram_code_dest_end as *const u32;
-        let ptr_src_start = &__ram_code_src_start as *const u32;
-        
-        let length = (ptr_dest_end as u32) - (ptr_dest_start as u32);
-        
-        memcpy44(ptr_dest_start as *mut u32, ptr_src_start, length);
-    }
-}
-
 #[unsafe(export_name = "main")]
 pub unsafe extern "C" fn main() -> ! {
     unsafe {
         spinlock_reset();
-        init_ram_code();
     }
     
     {
@@ -125,10 +104,9 @@ pub unsafe extern "C" fn main() -> ! {
         &mut pac.RESETS,
     ));
     
-    gpio::set_as_output(PIN_CNT_18, true, false);
+    PIN_CNT_18.into_output(true, false);
     
-    gpio::set_as_output(PIN_CNT_18_DIR, true, false);
-    gpio::set_low(PIN_CNT_18_DIR);
+    PIN_CNT_18_DIR.into_output(true, false).set_low();
     
     let mut mc = Multicore::new(&mut pac.PSM, &mut pac.PPB, &mut sio.fifo);
     let cores = mc.cores();

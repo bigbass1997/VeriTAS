@@ -11,7 +11,7 @@ pub mod displays;
 /// Do not use outside of CORE1!
 pub static mut VTABLE1: VectorTable = VectorTable::new();
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
     unsafe {
         // VTABLE1 uses the same PAC, but the Cortex processor handles the underlying addresses
@@ -35,7 +35,7 @@ pub fn run(usb_bus: UsbBusAllocator<UsbBus>) -> ! {
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 extern "C" fn usbctrl_irq_handler() {
     comms::check_usb();
 }

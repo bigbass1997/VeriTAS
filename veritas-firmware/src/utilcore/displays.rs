@@ -2,10 +2,9 @@ use cortex_m::asm::{delay, nop};
 use heapless::spsc::Queue;
 use heapless::Vec;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use crate::hal::gpio;
-use crate::hal::gpio::{PIN_DISPLAY_CLK, PIN_DISPLAY_SER, PIN_DISPLAY_STROBE0, PIN_DISPLAY_STROBE1, PIN_DISPLAY_STROBE2, PIN_DISPLAY_STROBE3};
+use crate::hal::gpio::{Gpio, PIN_DISPLAY_CLK, PIN_DISPLAY_SER, PIN_DISPLAY_STROBE0, PIN_DISPLAY_STROBE1, PIN_DISPLAY_STROBE2, PIN_DISPLAY_STROBE3};
 
-const STROBE_PINS: [usize; 4] = [
+const STROBE_PINS: [Gpio; 4] = [
     PIN_DISPLAY_STROBE0,
     PIN_DISPLAY_STROBE1,
     PIN_DISPLAY_STROBE2,
@@ -29,7 +28,7 @@ pub enum Port {
 
 static mut PORT_QUEUES: [Queue<Vec<u8, 8>, 4>; 4] = [Queue::new(), Queue::new(), Queue::new(), Queue::new()];
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 pub fn set_display(port: Port, data: &[u8]) {
     if port == Port::Err {
         return;
@@ -42,7 +41,7 @@ pub fn set_display(port: Port, data: &[u8]) {
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 pub fn check_displays() {
     for i in 0..4 {
         if let Some(data) = unsafe { PORT_QUEUES[i].dequeue() } {
@@ -52,14 +51,10 @@ pub fn check_displays() {
 }
 
 pub fn initialize() {
-    gpio::set_low(PIN_DISPLAY_CLK);
-    gpio::set_low(PIN_DISPLAY_SER);
-    
-    gpio::set_as_output(PIN_DISPLAY_CLK, true, false);
-    gpio::set_as_output(PIN_DISPLAY_SER, true, false);
+    PIN_DISPLAY_CLK.set_low().into_output(true, false);
+    PIN_DISPLAY_SER.set_low().into_output(true, false);
     for i in 0..4 {
-        gpio::set_low(STROBE_PINS[i]);
-        gpio::set_as_output(STROBE_PINS[i], true, false);
+        STROBE_PINS[i].set_low().into_output(true, false);
     }
     
     for byte in STARTUP {
@@ -89,18 +84,18 @@ fn write(port: Port, data: &[u8]) {
 #[inline]
 fn set_ser(state: bool) {
     if state {
-        gpio::set_high(PIN_DISPLAY_SER);
+        PIN_DISPLAY_SER.set_high();
     } else {
-        gpio::set_low(PIN_DISPLAY_SER);
+        PIN_DISPLAY_SER.set_low();
     }
     nop();
 }
 
 #[inline]
-fn pulse_pin(pin: usize) {
-    gpio::set_high(pin);
+fn pulse_pin(gpio: Gpio) {
+    gpio.set_high();
     nop();
-    gpio::set_low(pin);
+    gpio.set_low();
     nop();
 }
 

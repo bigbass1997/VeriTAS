@@ -3,9 +3,10 @@ use cortex_m::delay::Delay;
 use defmt::info;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use rp2040_pac::Interrupt::{IO_IRQ_BANK0, TIMER_IRQ_0};
-use rp2040_pac::{IO_BANK0, PPB, TIMER};
-use crate::hal::gpio;
-use crate::hal::gpio::{PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_3, PIN_CNT_4, PIN_CNT_5, PIN_CNT_6, PIN_CNT_7, PIN_DETECT};
+use rp2040_pac::TIMER;
+use crate::hal::interrupts;
+use crate::hal::gpio::{Gpio, PIN_CNT_11, PIN_CNT_13, PIN_CNT_18, PIN_CNT_18_DIR, PIN_CNT_5, PIN_CNT_7, PIN_CNT_9, PIN_DETECT};
+use crate::hal::interrupts::Edge::{EdgeHigh, EdgeLow};
 use crate::replaycore::{Transition, VERITAS_MODE, REPLAY_STATE, VeritasMode};
 use crate::utilcore::displays;
 use crate::utilcore::displays::Port;
@@ -26,33 +27,29 @@ static mut ALARM_ACTIVATED: bool = false;
 static mut FRAME_INPUT: [u8; 2] = [0xFF, 0xFF];
 static mut WORKING_INPUT: [u8; 2] = [0xFF, 0xFF];
 
-const SER: [usize; 2] = [PIN_CNT_5, PIN_CNT_4];
-const CLK: [usize; 2] = [PIN_CNT_7, PIN_CNT_6];
-const LAT: usize = PIN_CNT_3;
-const RST: usize = PIN_CNT_18;
+const SER: [Gpio; 2] = [PIN_CNT_5, PIN_CNT_9];
+const CLK: [Gpio; 2] = [PIN_CNT_7, PIN_CNT_11];
+const LAT: Gpio = PIN_CNT_13;
+const RST: Gpio = PIN_CNT_18;
 /// set HIGH to enable
-const RST_EN: usize = PIN_CNT_18_DIR;
+const RST_EN: Gpio = PIN_CNT_18_DIR;
 
 /// Prepares the device to replay a TAS.
 pub fn initialize() {
-    gpio::set_low(PIN_DETECT);
-    gpio::set_as_input(PIN_DETECT, false, true);
+    PIN_DETECT.set_low().into_input(false, true);
     
-    for pin in SER { // Player 1 and 2 serial
-        gpio::set_as_output(pin, false, false);
-        gpio::set_high(pin);
+    for gpio in SER { // Player 1 and 2 serial
+        gpio.into_output(false, false).set_high();
     }
     
-    for pin in CLK { // Player 1 and 2 clock
-        gpio::set_as_input(pin, false, false);
+    for gpio in CLK { // Player 1 and 2 clock
+        gpio.into_input(false, false);
     }
     
-    gpio::set_as_input(LAT, false, false); // Shared latch
+    LAT.into_input(false, false); // Shared latch
     
-    gpio::set_as_output(RST, true, false); // Console reset (active-high)
-    gpio::set_low(RST);
-    
-    gpio::set_high(RST_EN);
+    RST.into_output(true, false).set_low(); // Console reset (active-high)
+    RST_EN.into_output(false, false).set_high();
     
     unsafe {
         FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
@@ -68,35 +65,35 @@ fn enable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
         
-        (*IO_BANK0::ptr()).intr(1).write(|w| w.gpio7_edge_low().bit(true));
-        (*IO_BANK0::ptr()).intr(1).write(|w| w.gpio6_edge_low().bit(true));
-        (*IO_BANK0::ptr()).intr(1).write(|w| w.gpio3_edge_high().bit(true));
+        CLK[0].clear_interrupt(EdgeLow);
+        CLK[1].clear_interrupt(EdgeLow);
+        LAT.clear_interrupt(EdgeHigh);
         
-        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio7_edge_low().bit(true)); // CLK[0]
-        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio6_edge_low().bit(true)); // CLK[1]
-        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio3_edge_high().bit(true)); // LAT
-        (*PPB::ptr()).nvic_iser().write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
+        CLK[0].enable_interrupt(EdgeLow);
+        CLK[1].enable_interrupt(EdgeLow);
+        LAT.enable_interrupt(EdgeHigh);
+        interrupts::enable_nvic(IO_IRQ_BANK0);
         
         
         VTABLE0.register_handler(TIMER_IRQ_0 as usize, timer_irq_0_handler);
         
-        (*TIMER::ptr()).intr().write(|w| w.alarm_0().bit(true));
+        interrupts::clear_alarm(0);
         
-        (*TIMER::ptr()).inte().modify(|_, w| w.alarm_0().bit(true));
-        (*PPB::ptr()).nvic_iser().write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
+        interrupts::enable_alarm(0);
+        interrupts::enable_nvic(TIMER_IRQ_0);
     });
 }
 
 fn disable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
-        (*PPB::ptr()).nvic_icer().write(|w| w.bits(1 << (IO_IRQ_BANK0 as u32)));
-        (*PPB::ptr()).nvic_icer().write(|w| w.bits(1 << (TIMER_IRQ_0 as u32)));
+        interrupts::disable_nvic(IO_IRQ_BANK0);
+        interrupts::disable_nvic(TIMER_IRQ_0);
         
-        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio7_edge_low().bit(false)); // CLK[0]
-        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio6_edge_low().bit(false)); // CLK[1]
-        (*IO_BANK0::ptr()).proc0_inte(1).modify(|_, w| w.gpio3_edge_high().bit(false)); // LAT
+        CLK[0].disable_interrupt(EdgeLow);
+        CLK[1].disable_interrupt(EdgeLow);
+        LAT.disable_interrupt(EdgeHigh);
         
-        (*TIMER::ptr()).inte().modify(|r, w| w.bits(r.bits() & 0b1110));
+        interrupts::disable_alarm(0);
     });
 }
 
@@ -113,9 +110,9 @@ pub fn run(delay: &mut Delay) {
         info!("starting NES replay..");
         
         if REPLAY_STATE.use_initial_reset {
-            gpio::set_high(RST);
+            RST.set_high();
             delay.delay_ms(50);
-            gpio::set_low(RST);
+            RST.set_low();
         }
         
         delay.delay_ms(5);
@@ -135,15 +132,16 @@ pub fn run(delay: &mut Delay) {
         displays::set_display(Port::Display0, &[0x00]);
         displays::set_display(Port::Display1, &[0x00]);
         
-        gpio::set_low(RST);
+        RST.set_low();
         delay.delay_ms(10);
-        gpio::set_low(RST_EN);
+        RST_EN.set_low();
+        RST.set_high();
         
         info!("stopped NES replay");
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 #[inline(always)]
 unsafe fn latch() {
     unsafe {
@@ -157,15 +155,15 @@ unsafe fn latch() {
         // set first bit's state
         for i in 0..2 {
             if WORKING_INPUT[i] & 0x80 != 0 {
-                gpio::set_high(SER[i]);
+                SER[i].set_high();
             } else {
-                gpio::set_low(SER[i]);
+                SER[i].set_low();
             }
         }
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 #[inline(always)]
 unsafe fn clock(cnt: usize) {
     unsafe {
@@ -175,35 +173,33 @@ unsafe fn clock(cnt: usize) {
         delay(200); // CLOCK FILTER
         
         if WORKING_INPUT[cnt] & 0x80 != 0 {
-            gpio::set_high(SER[cnt]);
+            SER[cnt].set_high();
         } else {
-            gpio::set_low(SER[cnt]);
+            SER[cnt].set_low();
         }
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 extern "C" fn io_irq_bank0_handler() {
     unsafe {
-        let io_bank0 = &(*IO_BANK0::ptr());
-        
-        if io_bank0.proc0_ints(1).read().gpio3_edge_high().bit() { // LAT
+        if LAT.interrupt_status(EdgeHigh) {
             latch();
             
-            io_bank0.intr(1).write(|w| w.gpio3_edge_high().bit(true));
-        } else if io_bank0.proc0_ints(1).read().gpio7_edge_low().bit() { // CLK[0]
+            LAT.clear_interrupt(EdgeHigh);
+        } else if CLK[0].interrupt_status(EdgeLow) { // CLK[0]
             clock(0);
             
-            io_bank0.intr(1).write(|w| w.gpio7_edge_low().bit(true));
-        } else if io_bank0.proc0_ints(1).read().gpio6_edge_low().bit() { // CLK[1]
+            CLK[0].clear_interrupt(EdgeLow);
+        } else if CLK[1].interrupt_status(EdgeLow) { // CLK[1]
             clock(1);
             
-            io_bank0.intr(1).write(|w| w.gpio6_edge_low().bit(true));
+            CLK[1].clear_interrupt(EdgeLow);
         }
     }
 }
 
-#[unsafe(link_section = ".ram_code")]
+#[unsafe(link_section = ".data")]
 extern "C" fn timer_irq_0_handler() {
     unsafe {
         ALARM_ACTIVATED = false;
@@ -213,9 +209,9 @@ extern "C" fn timer_irq_0_handler() {
                 Transition::SoftReset => cortex_m::interrupt::free(|_| {
                     disable_interrupts();
                     
-                    gpio::set_high(RST);
+                    RST.set_high();
                     delay(5332558);
-                    gpio::set_low(RST);
+                    RST.set_low();
                     delay(10665);
                     
                     enable_interrupts();
@@ -237,6 +233,6 @@ extern "C" fn timer_irq_0_handler() {
             }
         }
         
-        (*TIMER::ptr()).intr().write(|w| w.alarm_0().bit(true));
+        interrupts::clear_alarm(0);
     }
 }
