@@ -1,4 +1,7 @@
-[![CERN](https://img.shields.io/badge/License-CERN%20OHL--W--V2-blue)](hardware/license/cern_ohl_w_v2.txt) [![MIT](https://img.shields.io/badge/License-BSD%202--Clause-blue)](LICENSE-MIT) [![APACHE2.0](https://img.shields.io/badge/License-BSD%202--Clause-blue)](LICENSE-APACHE)
+[![License: CERN](https://img.shields.io/badge/License-CERN%20OHL--W--V2-blue?style=flat-square)](hardware/license/cern_ohl_w_v2.txt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE-MIT)
+[![License: APACHE2.0](https://img.shields.io/badge/License-APACHE2.0-blue?style=flat-square)](LICENSE-APACHE)
+
 ### Description
 VeriTAS is a combination of a replay device for performing Tool-Assisted-Speedruns (aka Tool-Assisted-Superruns) on physical hardware, and software tooling that interfaces with the device and assists in other TAS replay tasks.
 
