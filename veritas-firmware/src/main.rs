@@ -23,6 +23,7 @@ use rp2040_hal::vector_table::VectorTable;
 use rp2040_hal::pac::{CorePeripherals, Peripherals};
 use rp2040_hal::sio::spinlock_reset;
 use rp2040_hal::gpio::Pins;
+use rp2040_pac::TIMER;
 use usb_device::class_prelude::UsbBusAllocator;
 use crate::allocator::ALLOCATOR;
 use crate::hal::gpio;
@@ -49,6 +50,11 @@ static mut CORE1_STACK: Stack<16384> = Stack::new();
 
 /// Do not use outside of CORE0!
 pub static mut VTABLE0: VectorTable = VectorTable::new();
+
+#[inline(always)]
+pub fn now() -> u64 {
+    unsafe { ((*TIMER::ptr()).timelr().read().bits() as u64) | (((*TIMER::ptr()).timehr().read().bits() as u64) << 32) }
+}
 
 #[unsafe(export_name = "main")]
 pub unsafe extern "C" fn main() -> ! {

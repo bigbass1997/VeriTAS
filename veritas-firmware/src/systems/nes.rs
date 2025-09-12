@@ -10,7 +10,7 @@ use crate::hal::interrupts::Edge::{EdgeHigh, EdgeLow};
 use crate::replaycore::{Transition, VERITAS_MODE, REPLAY_STATE, VeritasMode};
 use crate::utilcore::displays;
 use crate::utilcore::displays::Port;
-use crate::VTABLE0;
+use crate::{now, VTABLE0};
 
 /// Buffered list of controller inputs. 
 //pub static mut INPUT_BUFFER: Queue<[u8; 2], 1024> = Queue::new();
@@ -21,8 +21,13 @@ use crate::VTABLE0;
 pub static mut INPUT_BUFFER: ConstGenericRingBuffer<[u8; 2], { 1024 * 8 }> = ConstGenericRingBuffer::new();
 
 pub static mut LATCH_FILTER_US: u32 = 8000; //TODO: Write a detection procedure to relay to the user what the time between latch and 8th clock is.
-static mut OVERREAD: u8 = 1;
+pub static mut CLOCK_FILTER_CYC: u32 = 150;
+static mut OVERREAD: u8 = 0;
 
+static mut REPORTING: bool = false;
+static mut REPORT_CYC: u32 = 0;
+static mut REPORT_TIME: u64 = 0;
+static mut LAST_LATCH: u64 = 0;
 static mut ALARM_ACTIVATED: bool = false;
 static mut FRAME_INPUT: [u8; 2] = [0xFF, 0xFF];
 static mut WORKING_INPUT: [u8; 2] = [0xFF, 0xFF];
@@ -119,11 +124,29 @@ pub fn run(delay: &mut Delay) {
         
         enable_interrupts();
         
+        delay.delay_us(500);
+        
+        
+        REPORT_CYC = 0;
+        REPORT_TIME = 0;
+        REPORTING = true;
+        
+        while REPORT_CYC < 8 { nop(); }
+        REPORTING = false;
+        
+        info!("{}, {}us", REPORT_CYC, REPORT_TIME - LAST_LATCH);
+        
+        
         while VERITAS_MODE == VeritasMode::ReplayNes {
             nop();
         }
         
         disable_interrupts();
+        
+        for gpio in SER {
+            gpio.set_high();
+        }
+        
         while !INPUT_BUFFER.is_empty() {
             INPUT_BUFFER.dequeue().unwrap_or_default();
         }
@@ -145,6 +168,8 @@ pub fn run(delay: &mut Delay) {
 #[inline(always)]
 unsafe fn latch() {
     unsafe {
+        LAST_LATCH = now();
+        
         if !ALARM_ACTIVATED {
             ALARM_ACTIVATED = true;
             (*TIMER::ptr()).alarm0().write(|w| w.bits((*TIMER::ptr()).timerawl().read().bits().wrapping_add(LATCH_FILTER_US)));
@@ -160,6 +185,11 @@ unsafe fn latch() {
                 SER[i].set_low();
             }
         }
+        
+        if REPORTING {
+            REPORT_CYC = 0;
+            REPORT_TIME = LAST_LATCH;
+        }
     }
 }
 
@@ -170,12 +200,19 @@ unsafe fn clock(cnt: usize) {
         WORKING_INPUT[cnt] <<= 1;
         WORKING_INPUT[cnt] |= OVERREAD;
         
-        delay(200); // CLOCK FILTER
+        //while CLK[cnt].is_low() { nop(); } // faster than responding to rising edge interrupt
+        
+        delay(CLOCK_FILTER_CYC); // CLOCK FILTER
         
         if WORKING_INPUT[cnt] & 0x80 != 0 {
             SER[cnt].set_high();
         } else {
             SER[cnt].set_low();
+        }
+        
+        if REPORTING && cnt == 0 {
+            REPORT_CYC += 1;
+            REPORT_TIME = now();
         }
     }
 }
@@ -219,8 +256,15 @@ extern "C" fn timer_irq_0_handler() {
                 _ => (),
             }
         } else {
-            // TODO: Attempt to add option to throw error (and stop replay) if the buffer runs out
-            FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
+            //FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
+            FRAME_INPUT = match INPUT_BUFFER.dequeue() {
+                Some(v) => v,
+                None => {
+                    // TODO: Attempt to add option to throw error (and stop replay) if the buffer runs out
+                    
+                    [0xFF, 0xFF]
+                }
+            };
             
             displays::set_display(Port::Display0, &[FRAME_INPUT[0] ^ 0xFF]);
             displays::set_display(Port::Display1, &[FRAME_INPUT[1] ^ 0xFF]);
