@@ -4,6 +4,7 @@ resolver = "2"
 members = [
     "veritas-cli",
     "veritas-dump",
+    "veritas-emulators",
     "veritas-encode",
     "veritas-replay",
 ]

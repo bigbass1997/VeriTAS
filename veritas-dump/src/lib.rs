@@ -1,8 +1,12 @@
-use std::collections::VecDeque;
+use std::sync::Arc;
 use base64ct::{Base64, Encoding};
-use camino::{Utf8Path, Utf8PathBuf};
-use emu_runner::contexts::{BizHawkContext, FceuxContext, GensContext};
-use emu_runner::{EmulatorContext, EmulatorContextTrait};
+use camino::Utf8PathBuf;
+use crossbeam::queue::SegQueue;
+use crossbeam::sync::WaitGroup;
+use include_dir::{include_dir, Dir};
+use tracing::{error, info};
+use veritas_emulators::configs::BizHawkConfig;
+use veritas_emulators::contexts::EmulatorContext;
 use crate::cache::Cache;
 use crate::source::Source;
 use crate::parser::MovieFormat;
@@ -10,6 +14,8 @@ use crate::parser::MovieFormat;
 pub mod cache;
 pub mod source;
 pub mod parser;
+
+static INCLUDES: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/includes/");
 
 #[derive(Debug)]
 pub enum ConfigError {
@@ -37,6 +43,13 @@ struct DumpContext {
     movie_format: MovieFormat,
     rom: Utf8PathBuf,
 }
+impl DumpContext {
+    pub fn dump_path(&self) -> Utf8PathBuf {
+        self.movie_file.with_extension("tasd")
+    }
+}
+
+type PreparedContext = (EmulatorContext, DumpContext);
 
 /// Processes TAS movies into TASD files.
 /// 
@@ -45,33 +58,46 @@ struct DumpContext {
 /// 
 /// Calling [`Dumper::dump`] will start the dumping procedure.
 pub struct Dumper<'c> {
-    cache: &'c mut Cache,
-    tmp: Utf8PathBuf,
-    contexts: VecDeque<DumpContext>,
+    hashes: &'c mut Cache,
+    cache_root: Utf8PathBuf,
+    contexts: Vec<DumpContext>,
     emulators: Vec<EmulatorContext>,
+    threads: usize,
 }
 impl<'c> Dumper<'c> {
-    pub fn new<P: Into<Utf8PathBuf>>(temp_dir: P, cache: &'c mut Cache) -> Self {
-        let tmp = temp_dir.into();
-        let tmp = tmp.canonicalize_utf8().unwrap_or(tmp);
-        std::fs::create_dir_all(tmp.join("movies/")).unwrap();
-        std::fs::create_dir_all(tmp.join("includes/")).unwrap();
+    pub fn new<P: Into<Utf8PathBuf>>(cache_root: P, threads: usize, hashes: &'c mut Cache) -> Self {
+        let cache_root = cache_root.into();
+        let cache_root = cache_root.canonicalize_utf8().unwrap_or(cache_root);
+        let includes_path = cache_root.join("includes/");
+        
+        std::fs::create_dir_all(cache_root.join("movies/")).unwrap();
+        std::fs::create_dir_all(&includes_path).unwrap();
+        
+        for entry in INCLUDES.find("**/*").unwrap() {
+            let Some(entry) = entry.as_file() else { continue };
+            let Some(name) = entry.path().to_str() else { continue };
+            
+            let file_path = includes_path.join(name);
+            std::fs::write(file_path, entry.contents()).unwrap();
+        }
+        
         Self {
-            tmp,
-            cache,
-            contexts: VecDeque::new(),
+            cache_root,
+            hashes,
+            contexts: Vec::new(),
             emulators: Vec::new(),
+            threads,
         }
     }
     
-    pub fn movie(&mut self, source: Source, rom_override: Option<Utf8PathBuf>) -> Result<(), ConfigError> {
+    pub fn movie(&mut self, source: &Source, rom_override: Option<Utf8PathBuf>) -> Result<(), ConfigError> {
         let Some((movie_data, filename)) = source.read() else {
             return Err(ConfigError::SourceNotFound)
         };
         
-        let movie_file = self.tmp.join("movies/").join(&filename);
+        let movie_file = self.cache_root.join("movies/").join(&filename);
         
-        if let Source::Local(local) = &source {
+        if let Source::Local(local) = source {
             std::fs::copy(local, &movie_file)?;
         } else {
             std::fs::write(&movie_file, &movie_data)?;
@@ -85,15 +111,15 @@ impl<'c> Dumper<'c> {
         let rom = if let Some(rom_override) = rom_override {
             rom_override
         } else {
-            self.find_rom(&source, &movie_format)?
+            self.find_rom(source, &movie_format)?
         };
         
         if !rom.is_file() {
             return Err(ConfigError::RomNotFound);
         }
         
-        self.contexts.push_back(DumpContext {
-            source,
+        self.contexts.push(DumpContext {
+            source: source.clone(),
             movie_file,
             movie_format,
             rom,
@@ -102,19 +128,8 @@ impl<'c> Dumper<'c> {
         Ok(())
     }
     
-    pub fn emulator<P: AsRef<Utf8Path>>(&mut self, path: P) -> Result<(), ConfigError> {
-        let path = path.as_ref();
-        
-        let ctx: EmulatorContext = 'ctx: {
-            if let Ok(ctx) = BizHawkContext::new(&path) { break 'ctx ctx.into(); }
-            if let Ok(ctx) = FceuxContext::new(&path) { break 'ctx ctx.into(); }
-            if let Ok(ctx) = GensContext::new(&path) { break 'ctx ctx.into(); }
-            
-            return Err(ConfigError::EmulatorNotFound)
-        };
-        
-        self.emulators.push(ctx);
-        Ok(())
+    pub fn emulator(&mut self, context: EmulatorContext) {
+        self.emulators.push(context);
     }
     
     /// Begins to dump all [queued][Dumper::movie] movies.
@@ -128,8 +143,6 @@ impl<'c> Dumper<'c> {
     /// * Some versions of BizHawk may produce popup "errors" (e.g. wrong/missing cycle count) that must be cleared manually to proceed.
     /// * There is no guarantee the dumped inputs accurately reflect the movie's intent. As in, if a movie doesn't sync correctly, the dump process has no way to know that.
     pub fn dump(&mut self) -> Vec<(Source, Utf8PathBuf)> {
-        //TODO: create threadpool and work queues
-        
         // 1. determine which emulator and emu version is needed for movie
         // 2. check if emulator is available in `self`
         // 3. create emu-runner context
@@ -138,81 +151,139 @@ impl<'c> Dumper<'c> {
         
         // *1/*2. if emulator version checking is unsupported, default to first matching emulator
         
-        let includes = self.tmp.join("includes/");
-        //TODO: Remove these, and instead generate the config on-the-fly for every spawned emulator instance
-        std::fs::write(includes.join("2.6.config.ini"), include_bytes!("includes/2.6.config.ini")).unwrap();
-        std::fs::write(includes.join("2.6.1.config.ini"), include_bytes!("includes/2.6.1.config.ini")).unwrap();
-        std::fs::write(includes.join("2.6.2.config.ini"), include_bytes!("includes/2.6.2.config.ini")).unwrap();
-        std::fs::write(includes.join("2.6.3.config.ini"), include_bytes!("includes/2.6.3.config.ini")).unwrap();
-        std::fs::write(includes.join("2.7.config.ini"), include_bytes!("includes/2.7.config.ini")).unwrap();
-        std::fs::write(includes.join("2.8.config.ini"), include_bytes!("includes/2.8.config.ini")).unwrap();
-        std::fs::write(includes.join("2.8-rc1.config.ini"), include_bytes!("includes/2.8-rc1.config.ini")).unwrap();
-        std::fs::write(includes.join("2.9.config.ini"), include_bytes!("includes/2.9.config.ini")).unwrap();
-        std::fs::write(includes.join("2.9-rc1.config.ini"), include_bytes!("includes/2.9-rc1.config.ini")).unwrap();
-        std::fs::write(includes.join("2.9-rc2.config.ini"), include_bytes!("includes/2.9-rc2.config.ini")).unwrap();
-        std::fs::write(includes.join("2.9-rc3.config.ini"), include_bytes!("includes/2.9-rc3.config.ini")).unwrap();
-        std::fs::write(includes.join("2.9.1.config.ini"), include_bytes!("includes/2.9.1.config.ini")).unwrap();
-        std::fs::write(includes.join("tasd-api.lua"), include_bytes!("includes/tasd-api.lua")).unwrap();
-        std::fs::write(includes.join("tasd-bizhawk.lua"), include_bytes!("includes/tasd-bizhawk.lua")).unwrap();
-        std::fs::write(includes.join("tasd-fceux.lua"), include_bytes!("includes/tasd-fceux.lua")).unwrap();
-        std::fs::write(includes.join("tasd-gens.lua"), include_bytes!("includes/tasd-gens.lua")).unwrap();
+        let dumps = Arc::new(SegQueue::new());
+        let queue = Arc::new(self.prepare_contexts());
         
-        let mut dumps = vec![];
+        if queue.is_empty() {
+            return vec![];
+        }
         
-        while let Some(ctx) = self.contexts.pop_front() {
-            let dump_path = ctx.movie_file.with_extension("tasd");
-            
-            match ctx.movie_format {
+        let wg = WaitGroup::new();
+        for i in 0..self.threads.clamp(1, queue.len()) {
+            let wg = wg.clone();
+            let dumps = dumps.clone();
+            let queue = queue.clone();
+            std::thread::Builder::new().name(format!("dumper_{i}")).spawn(move || {
+                while let Some((mut emu, dump)) = queue.pop() {
+                    match emu.run() {
+                        Ok(_) => {
+                            let tasd = dump.dump_path();
+                            let DumpContext { source: src, rom, .. } = dump;
+                            
+                            if tasd.exists() {
+                                info!("Dumped: {src} | TASD: {tasd} | ROM: {rom}");
+                                dumps.push((src, tasd))
+                            } else {
+                                error!("Dump failed: {src}")
+                            }
+                        },
+                        Err(err) => error!("{}: {err:?}", dump.source)
+                    }
+                }
+                
+                drop(wg);
+            }).expect("should have spawned a thread");
+        }
+        wg.wait();
+        
+        Arc::into_inner(dumps).expect("arc should only have one reference").into_iter().collect()
+    }
+    
+    fn prepare_contexts(&mut self) -> SegQueue<PreparedContext> {
+        let includes = self.cache_root.join("includes/");
+        let prepared = SegQueue::new();
+        
+        let mut contexts = vec![];
+        std::mem::swap(&mut contexts, &mut self.contexts);
+        
+        for ctx in contexts {
+            match &ctx.movie_format {
                 MovieFormat::Bk2(bk2) => {
                     let mut emu = self.emulators.iter()
-                        .filter_map(|emu| match emu {
-                            EmulatorContext::BizHawk(emu) => Some(emu),
-                            _ => None,
-                        })
-                        .filter(|emu| bk2.emu_version.as_ref().is_some_and(|required_ver| emu.detect_version().is_some_and(|emu_ver| required_ver.contains(&emu_ver))))
-                        .cloned()
-                        .next();
+                        .filter_map(|emu| emu.as_bizhawk())
+                        .find(|emu| bk2.emu_version.as_ref().is_some_and(|required_ver| required_ver == emu.version()))
+                        .cloned();
                     
                     if emu.is_none() {
                         emu = self.emulators.iter()
-                            .find_map(|emu| match emu {
-                                EmulatorContext::BizHawk(emu) => Some(emu),
-                                _ => None,
-                            })
+                            .find_map(|emu| emu.as_bizhawk())
                             .cloned();
                     }
                     
-                    let Some(mut emu) = emu else { continue };
+                    let Some(emu) = emu else {
+                        let emu_ver = if let Some(ver) = &bk2.emu_version {
+                            format!("BizHawk v{}", ver.as_str())
+                        } else {
+                            format!("BizHawk")
+                        };
+                        error!("Failed to locate compatible emulator ({emu_ver}) for {}", ctx.source);
+                        
+                        continue
+                    };
                     
-                    if let Some(ver) = emu.detect_version() {
-                        emu = emu.with_config(includes.join(format!("{ver}.config.ini")));
-                    }
+                    let config = BizHawkConfig::veritas(emu.version());
+                    let config_path = ctx.movie_file.with_extension("ini");
+                    std::fs::write(&config_path, config.to_vec()).unwrap();
                     
-                    //println!("dumping with bizhawk {}", emu.detect_version().unwrap_or_default());
-                    emu.with_rom(ctx.rom)
-                        .with_movie(ctx.movie_file)
-                        .with_lua(includes.join("tasd-bizhawk.lua"))
-                        .run()
-                        .unwrap();
-                    
-                    dumps.push((ctx.source, dump_path));
+                    prepared.push((
+                        EmulatorContext::BizHawk(
+                            emu.with_rom(&ctx.rom)
+                                .with_movie(&ctx.movie_file)
+                                .with_config(config_path)
+                                .with_lua(includes.join("tasd-bizhawk.lua"))
+                        ),
+                        ctx
+                    ));
                 },
                 MovieFormat::Fm2(_fm2) => {
-                    let emu = self.emulators.iter()
-                        .find_map(|emu| match emu {
-                            EmulatorContext::Fceux(emu) => Some(emu),
-                            _ => None,
-                        })
+                    let required_ver = 'find_ver: {
+                        match ctx.source {
+                            Source::Publication(_) => {
+                                if let Some(p) = ctx.source.publication_metadata() && let Some(emu_ver) = p.emulator_version && emu_ver.contains('.') {
+                                    let emu_ver = emu_ver.trim();
+                                    
+                                    break 'find_ver emu_ver.split_once(' ').unwrap_or(("", emu_ver)).1.trim().to_string();
+                                }
+                            },
+                            Source::Submission(_) => {
+                                if let Some(s) = ctx.source.submission_metadata() && let Some(emu_ver) = s.emulator_version && emu_ver.contains('.') {
+                                    let emu_ver = emu_ver.trim();
+                                    
+                                    break 'find_ver emu_ver.split_once(' ').unwrap_or(("", emu_ver)).1.trim().to_string();
+                                }
+                            },
+                            _ => ()
+                        }
+                        
+                        _fm2.version_string()
+                    };
+                    
+                    let mut emu = self.emulators.iter()
+                        .filter_map(|emu| emu.as_fceux())
+                        .find(|emu| emu.version == required_ver)
                         .cloned();
-                    let Some(emu) = emu else { continue };
                     
-                    emu.with_rom(ctx.rom)
-                        .with_movie(ctx.movie_file)
-                        .with_lua(includes.join("tasd-fceux.lua"))
-                        .run()
-                        .unwrap();
+                    if emu.is_none() {
+                        emu = self.emulators.iter()
+                            .find_map(|emu| emu.as_fceux())
+                            .cloned();
+                    }
                     
-                    dumps.push((ctx.source, dump_path));
+                    let Some(emu) = emu else {
+                        error!("Failed to locate compatible emulator (FCEUX v{required_ver}) for {}", ctx.source);
+                        
+                        continue
+                    };
+                    
+                    prepared.push((
+                        EmulatorContext::Fceux(
+                            emu.with_rom(&ctx.rom)
+                                .with_movie(&ctx.movie_file)
+                                //.with_config(config_path) //TODO: Write FCEUX config generator
+                                .with_lua(includes.join("tasd-fceux.lua"))
+                        ),
+                        ctx
+                    ));
                 },
                 MovieFormat::Gmv(_gmv) => {
                     todo!()
@@ -220,7 +291,7 @@ impl<'c> Dumper<'c> {
             }
         }
         
-        dumps
+        prepared
     }
     
     fn find_rom(&self, source: &Source, movie: &MovieFormat) -> Result<Utf8PathBuf, ConfigError> {
@@ -256,7 +327,7 @@ impl<'c> Dumper<'c> {
             
             let sha1 = ver.sha1.and_then(|hash| hex::decode(hash).ok());
             if let Some(sha1) = sha1 {
-                let paths = self.cache.find_paths(|bundle| bundle.sha1.as_slice() == &sha1);
+                let paths = self.hashes.find_paths(|bundle| bundle.sha1.as_slice() == &sha1);
                 if let Some(path) = paths.into_iter().next() {
                     return Ok(path.into());
                 }
@@ -264,15 +335,13 @@ impl<'c> Dumper<'c> {
             
             let md5 = ver.md5.and_then(|hash| hex::decode(hash).ok());
             if let Some(md5) = md5 {
-                let paths = self.cache.find_paths(|bundle| bundle.md5.as_slice() == &md5);
+                let paths = self.hashes.find_paths(|bundle| bundle.md5.as_slice() == &md5);
                 if let Some(path) = paths.into_iter().next() {
                     return Ok(path.into());
                 }
             }
         }
         
-        println!("searching movie");
-        println!("{movie:?}");
         'search_movie: {
             let hash = match movie {
                 MovieFormat::Bk2(bk2) => {
@@ -293,7 +362,7 @@ impl<'c> Dumper<'c> {
                 MovieFormat::Gmv(_) => break 'search_movie, // GMV doesn't store ROM details *facepalm*
             };
             
-            let paths = self.cache.find_paths(|bundle| bundle.sha1.as_slice() == &hash || bundle.md5.as_slice() == &hash);
+            let paths = self.hashes.find_paths(|bundle| bundle.sha1.as_slice() == &hash || bundle.md5.as_slice() == &hash);
             if let Some(path) = paths.into_iter().next() {
                 return Ok(path.into());
             }

@@ -2,9 +2,11 @@
 name = "veritas-cli"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 veritas-dump = { version = "0.1", path = "../veritas-dump" }
+veritas-emulators = { version = "0.2", path = "../veritas-emulators" }
 
 tracing = "0.1"
 tracing-subscriber = "0.3"

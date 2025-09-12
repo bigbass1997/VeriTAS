@@ -12,7 +12,7 @@ local playerKeys = {
     {"P2 Right", "P2 Left", "P2 Down", "P2 Up", "P2 Start", "P2 Select", "P2 B", "P2 A"}
 }
 
-if client.getversion() == "2.9" or client.getversion() == "2.9.1" then
+if client.getversion() == "2.9" or client.getversion() == "2.9.1" or client.getversion() == "2.10" then
 	bit = (require "migration_helpers").EmuHawk_pre_2_9_bit()
 end
 

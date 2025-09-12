@@ -126,7 +126,7 @@ impl Cache {
     /// Files that cannot be read (e.g. lack of permissions) will be silently ignored.
     /// 
     /// Use [`Cache::force_rehash`] to force the cache to rehash the given files.
-    pub fn refresh(&mut self, path: Option<&str>) {
+    pub fn refresh(&mut self, refresh_path: Option<Utf8PathBuf>) {
         let mut recalc_paths = vec![];
         self.items.retain_mut(|item| {
             item.paths.retain(|path| Utf8Path::new(&path).is_file());
@@ -150,7 +150,7 @@ impl Cache {
         }
         
         let mut add_count = 0usize;
-        if let Some(path) = path {
+        if let Some(path) = refresh_path {
             for path in Self::walked_dir(path) {
                 if !self.items.iter().any(|item| item.paths.iter().any(|p| p == path.as_str())) {
                     let Ok(hashes) = HashBundle::from_path(&path) else { continue };

@@ -124,4 +124,12 @@ impl Fm2 {
             extra_pairs: pairs,
         })
     }
+    
+    pub fn version_string(&self) -> String {
+        let major = self.emu_version / 10000;
+        let minor = (self.emu_version / 100) % 100;
+        let patch = self.emu_version % 100;
+        
+        format!("{major}.{minor}.{patch}")
+    }
 }

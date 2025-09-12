@@ -1,12 +1,12 @@
 //! 
 //! 
-//! 
-
+//!
 use veritas_dump::cache::Cache;
 use clap::Parser;
-use crate::cli::{Args, Command, DumpArgs, EncodeArgs, ReplayArgs};
+use crate::cli::{Args, Command, EncodeArgs, ReplayArgs};
 
 pub mod cli;
+pub mod dump;
 
 fn main() {
     let args: Args = Args::parse();
@@ -19,9 +19,9 @@ fn main() {
     }
     
     match args.command {
-        Command::Encode(args) => handle_encode(args),
-        Command::Dump(args) => handle_dump(args),
+        Command::Dump(args) => dump::handle(args),
         Command::Replay(args) => handle_replay(args),
+        Command::Encode(args) => handle_encode(args),
     }
     
     return;
@@ -109,14 +109,10 @@ fn main() {
     }
 }
 
-fn handle_encode(args: EncodeArgs) {
-    
-}
-
-fn handle_dump(args: DumpArgs) {
-    
-}
-
 fn handle_replay(args: ReplayArgs) {
+    
+}
+
+fn handle_encode(args: EncodeArgs) {
     
 }

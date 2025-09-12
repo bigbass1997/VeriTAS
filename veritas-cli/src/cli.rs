@@ -14,9 +14,9 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    Encode(EncodeArgs),
     Dump(DumpArgs),
     Replay(ReplayArgs),
+    Encode(EncodeArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -32,9 +32,17 @@ pub struct EncodeArgs {
 
 #[derive(Debug, Parser)]
 pub struct DumpArgs {
+    /// Specifies the directory VeriTAS should use for its local cache. Default: `./cache/`
+    #[arg(long)]
+    pub cache: Option<Utf8PathBuf>,
+    
     /// Refreshes the ROM cache using all files found at the specified path.
     #[arg(long)]
     pub refresh: Option<Utf8PathBuf>,
+    
+    /// The number of parallel threads used to dump movies.
+    #[arg(short, long, default_value = "4")]
+    pub threads: usize,
     
     /// List of movies to dump.
     /// 
@@ -53,7 +61,7 @@ pub struct DumpArgs {
     /// - `/path/to/movie.bk2` would retrieve the expected ROM hash from the movie, and look for a
     ///   matching ROM in the cache.
     #[arg(long, short, num_args = 1.., help = None, verbatim_doc_comment)]
-    fetch: Vec<String>,
+    pub fetch: Vec<String>,
 }
 impl DumpArgs {
     pub fn fetch(&self) -> impl Iterator<Item = (&str, &str)> {

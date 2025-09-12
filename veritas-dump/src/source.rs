@@ -117,6 +117,28 @@ impl Source {
         })
     }
     
+    pub fn publication_metadata(&self) -> Option<tasvideos_api_rs::Publication> {
+        let Self::Publication(id) = self else { return None };
+        
+        tasvideos_api_rs::get_publication(*id).ok()
+    }
+    
+    pub fn submission_metadata(&self) -> Option<tasvideos_api_rs::Submission> {
+        let id = match self {
+            Self::Publication(pid) => {
+                let Ok(p) = tasvideos_api_rs::get_publication(*pid) else { return None };
+                let Some(sid) = p.submission_id else { return None };
+                
+                sid
+            },
+            Self::Submission(sid) => *sid,
+            
+            _ => return None,
+        };
+        
+        tasvideos_api_rs::get_submission(id).ok()
+    }
+    
     pub fn is_local(&self) -> bool {
         match self {
             Self::Local(_) => true,

@@ -2,19 +2,22 @@
 name = "veritas-dump"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 walkdir = "2.5"
+include_dir = { version = "0.7", features = ["glob"] }
 tasvideos-api-rs = "0.3"
-bincode = "2.0.0-rc.3"
-sha1 = "0.11.0-pre.4"
-md-5 = "0.11.0-pre.4"
+bincode = "2.0.1"
+sha1 = "0.11.0-rc.2"
+md-5 = "0.11.0-rc.2"
 hex = "0.4"
 
-zip = "2.2"
-flate2 = "1.0"
-emu-runner = { version = "0.2.0", path = "/data/projects/emu-runner/" }
-base64ct = { version = "1.6", features = ["alloc"] }
+zip = "5.0"
+flate2 = "1.1"
+veritas-emulators = { version = "0.2.0", path = "../veritas-emulators" }
+base64ct = { version = "1.8", features = ["alloc"] }
 camino = "1.1"
+crossbeam = "0.8"
 
 tracing = "0.1"
