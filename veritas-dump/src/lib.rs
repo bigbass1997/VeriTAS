@@ -199,19 +199,21 @@ impl<'c> Dumper<'c> {
         for ctx in contexts {
             match &ctx.movie_format {
                 MovieFormat::Bk2(bk2) => {
-                    let mut emu = self.emulators.iter()
+                    let required_ver = bk2.emu_version.as_ref().map(|v| v.trim_start_matches("Version ").to_string());
+                    
+                    let emu = self.emulators.iter()
                         .filter_map(|emu| emu.as_bizhawk())
-                        .find(|emu| bk2.emu_version.as_ref().is_some_and(|required_ver| required_ver == emu.version()))
+                        .find(|emu| required_ver.as_ref().is_some_and(|required_ver| required_ver == emu.version()))
                         .cloned();
                     
-                    if emu.is_none() {
+                    /*if emu.is_none() {
                         emu = self.emulators.iter()
                             .find_map(|emu| emu.as_bizhawk())
                             .cloned();
-                    }
+                    }*/
                     
                     let Some(emu) = emu else {
-                        let emu_ver = if let Some(ver) = &bk2.emu_version {
+                        let emu_ver = if let Some(ver) = required_ver {
                             format!("BizHawk v{}", ver.as_str())
                         } else {
                             format!("BizHawk")
