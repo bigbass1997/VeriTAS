@@ -115,7 +115,14 @@ impl Fm2 {
             port2: pairs.remove("port2")?.parse().ok()?,
             binary: pairs.remove("binary").map(|x| x.parse().ok()).flatten(),
             length: pairs.remove("length").map(|x| x.parse().ok()).flatten(),
-            rom_filename: pairs.remove("romFilename")?,
+            rom_filename: pairs.remove("romFilename").or_else(|| {
+                data[0..input_index].split(|b| *b == b'\n')
+                    .map(|line| line.trim_ascii_end())
+                    .find(|line| line.starts_with(b"romFilename"))
+                    .map(|line| line.splitn(2, |b| *b == b' ').nth(1))
+                    .flatten()
+                    .map(|ver| String::from_utf8_lossy(ver).to_string())
+            })?,
             comments,
             subtitles,
             guid: pairs.remove("guid")?,

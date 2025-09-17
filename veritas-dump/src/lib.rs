@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use crossbeam::queue::SegQueue;
 use crossbeam::sync::WaitGroup;
 use include_dir::{include_dir, Dir};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use veritas_emulators::configs::BizHawkConfig;
 use veritas_emulators::contexts::EmulatorContext;
 use crate::cache::Cache;
@@ -92,6 +92,7 @@ impl<'c> Dumper<'c> {
     
     pub fn movie(&mut self, source: &Source, rom_override: Option<Utf8PathBuf>) -> Result<(), ConfigError> {
         let Some((movie_data, filename)) = source.read() else {
+            debug!("Failed to read movie data from source: {source}");
             return Err(ConfigError::SourceNotFound)
         };
         
@@ -105,6 +106,7 @@ impl<'c> Dumper<'c> {
         
         let (_, ext) = filename.rsplit_once('.').unwrap_or((&filename, ""));
         let Some(movie_format) = MovieFormat::parse(&movie_data, ext) else {
+            debug!("Failed to parse movie format from: {movie_file}");
             return Err(ConfigError::SourceNotFound)
         };
         
