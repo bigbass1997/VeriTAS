@@ -51,6 +51,7 @@ static mut CORE1_STACK: Stack<16384> = Stack::new();
 /// Do not use outside of CORE0!
 pub static mut VTABLE0: VectorTable = VectorTable::new();
 
+#[unsafe(link_section = ".data")]
 #[inline(always)]
 pub fn now() -> u64 {
     unsafe { ((*TIMER::ptr()).timelr().read().bits() as u64) | (((*TIMER::ptr()).timehr().read().bits() as u64) << 32) }

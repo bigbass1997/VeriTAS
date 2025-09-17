@@ -66,6 +66,7 @@ pub fn initialize() {
     }
 }
 
+#[unsafe(link_section = ".data")]
 fn enable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
         VTABLE0.register_handler(IO_IRQ_BANK0 as usize, io_irq_bank0_handler);
@@ -89,6 +90,7 @@ fn enable_interrupts() {
     });
 }
 
+#[unsafe(link_section = ".data")]
 fn disable_interrupts() {
     cortex_m::interrupt::free(|_| unsafe {
         interrupts::disable_nvic(IO_IRQ_BANK0);
@@ -114,30 +116,40 @@ pub fn run(delay: &mut Delay) {
         
         info!("starting NES replay..");
         
+        if LATCH_FILTER_US == 0 {
+            REPORT_CYC = 0;
+            REPORT_TIME = 0;
+            REPORTING = true;
+            
+            enable_interrupts();
+            
+            while REPORT_CYC < 8 { nop(); }
+            disable_interrupts();
+            REPORTING = false;
+            
+            info!("{}, {}us", REPORT_CYC, REPORT_TIME - LAST_LATCH);
+            
+            LATCH_FILTER_US = (REPORT_TIME - LAST_LATCH) as u32 + 4;
+        }
+        
         if REPLAY_STATE.use_initial_reset {
             RST.set_high();
             delay.delay_ms(50);
             RST.set_low();
+            delay.delay_ms(5);
         }
         
-        delay.delay_ms(5);
-        
         enable_interrupts();
-        
         delay.delay_us(500);
         
         
-        REPORT_CYC = 0;
-        REPORT_TIME = 0;
-        REPORTING = true;
-        
-        while REPORT_CYC < 8 { nop(); }
-        REPORTING = false;
-        
-        info!("{}, {}us", REPORT_CYC, REPORT_TIME - LAST_LATCH);
-        
-        
+        let mut last_inputs = FRAME_INPUT;
         while VERITAS_MODE == VeritasMode::ReplayNes {
+            if last_inputs != FRAME_INPUT {
+                displays::set_display(Port::Display0, &[FRAME_INPUT[0] ^ 0xFF]);
+                displays::set_display(Port::Display1, &[FRAME_INPUT[1] ^ 0xFF]);
+                last_inputs = FRAME_INPUT;
+            }
             nop();
         }
         
@@ -241,6 +253,18 @@ extern "C" fn timer_irq_0_handler() {
     unsafe {
         ALARM_ACTIVATED = false;
         
+        if !REPORTING {
+            increment_replay();
+        }
+        
+        interrupts::clear_alarm(0);
+    }
+}
+
+#[unsafe(link_section = ".data")]
+#[inline(always)]
+fn increment_replay() {
+    unsafe {
         if let Some(tra) = REPLAY_STATE.next_transition() {
             match tra {
                 Transition::SoftReset => cortex_m::interrupt::free(|_| {
@@ -256,7 +280,6 @@ extern "C" fn timer_irq_0_handler() {
                 _ => (),
             }
         } else {
-            //FRAME_INPUT = INPUT_BUFFER.dequeue().unwrap_or([0xFF, 0xFF]);
             FRAME_INPUT = match INPUT_BUFFER.dequeue() {
                 Some(v) => v,
                 None => {
@@ -266,9 +289,6 @@ extern "C" fn timer_irq_0_handler() {
                 }
             };
             
-            displays::set_display(Port::Display0, &[FRAME_INPUT[0] ^ 0xFF]);
-            displays::set_display(Port::Display1, &[FRAME_INPUT[1] ^ 0xFF]);
-            
             if REPLAY_STATE.index_cur == REPLAY_STATE.index_len {
                 VERITAS_MODE = VeritasMode::Idle;
                 info!("Replay ended!");
@@ -276,7 +296,5 @@ extern "C" fn timer_irq_0_handler() {
                 REPLAY_STATE.index_cur += 1;
             }
         }
-        
-        interrupts::clear_alarm(0);
     }
 }
