@@ -37,8 +37,18 @@ pub struct DumpArgs {
     pub cache: Option<Utf8PathBuf>,
     
     /// Refreshes the ROM cache using all files found at the specified path.
-    #[arg(long)]
+    #[arg(short, long)]
     pub refresh: Option<Utf8PathBuf>,
+    
+    /// Adds to the list of available emulators for use when dumping.
+    /// 
+    /// Each entry is parsed as `path,version` where `path` is a file path to the root directory or
+    /// executable of an emulator, and `version` is the version of the emulator.
+    /// 
+    /// Example:
+    /// - `/path/to/bizhawk/,2.9.1` would register an emulator with version `2.9.1` located at `/path/to/bizhawk/`.
+    #[arg(short, long, help = None, verbatim_doc_comment)]
+    pub emulator: Vec<String>,
     
     /// The number of parallel threads used to dump movies.
     #[arg(short, long, default_value = "4")]

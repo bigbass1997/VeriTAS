@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::process::Command;
+use std::str::FromStr;
 use camino::Utf8PathBuf;
 use crate::contexts::EmulatorContext;
 use crate::Error;
@@ -16,8 +17,21 @@ impl Display for GensVersion {
         write!(f, "{}", match self {
             Self::Ver11A => "11a",
             Self::Ver11B => "11b",
-            Self::GitA2425B5 => "a2425B5",
+            Self::GitA2425B5 => "a2425b5",
             Self::Unknown => "unknown",
+        })
+    }
+}
+impl FromStr for GensVersion {
+    type Err = ();
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "11a" => Self::Ver11A,
+            "11b" => Self::Ver11B,
+            "a2425b5" => Self::GitA2425B5,
+            
+            _ => return Err(())
         })
     }
 }

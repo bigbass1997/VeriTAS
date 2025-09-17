@@ -1,4 +1,5 @@
 use std::process::Output;
+use tracing::debug;
 use crate::Error;
 
 mod bizhawk;
@@ -36,6 +37,8 @@ impl EmulatorContext {
             Self::Fceux(ctx) => ctx.build_command()?,
             Self::Gens(ctx) => ctx.build_command()?,
         };
+        
+        debug!("{cmd:?}");
         
         cmd.output().map_err(|e| e.into())
     }
