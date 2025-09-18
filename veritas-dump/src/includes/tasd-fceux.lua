@@ -95,7 +95,13 @@ while (true) do
         frame = 0
         movie.stop()
         emu.pause()
-        emu.exit()
+        
+        if emu.exit ~= nil then
+            emu.exit()
+        else
+            print("Version of FCEUX doesn't support exiting from Lua. Please exit the emulator manually!")
+            break
+        end
     end
     
     emu.frameadvance();
