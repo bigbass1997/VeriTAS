@@ -101,7 +101,7 @@ impl Source {
             },
             Self::Userfile(id) => {
                 let (gzip, name) = tasvideos_api_rs::get_userfile(*id).ok()?;
-                let data = Self::deflate(gzip);
+                let data = Self::deflate(&gzip).unwrap_or(gzip);
                 
                 let filename = match name {
                     Some(name) => match Utf8Path::new(&name).extension() {
@@ -158,11 +158,13 @@ impl Source {
         Some((data, ext.to_owned()))
     }
     
-    fn deflate(gzip: Vec<u8>) -> Vec<u8> {
-        let mut decoder = GzDecoder::new(gzip.as_slice());
-        let mut data = Vec::with_capacity(gzip.len()); // decompressed should be at least as large as compressed
-        decoder.read_to_end(&mut data).unwrap();
+    fn deflate(gzip: &[u8]) -> Option<Vec<u8>> {
+        let mut decoder = GzDecoder::new(gzip);
+        if decoder.header().is_none() { return None }
         
-        data
+        let mut data = Vec::with_capacity(gzip.len()); // decompressed should be at least as large as compressed
+        decoder.read_to_end(&mut data).ok()?;
+        
+        Some(data)
     }
 }
