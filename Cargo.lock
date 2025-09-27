@@ -1224,9 +1224,9 @@ dependencies = [
 
 [[package]]
 name = "tasvideos-api-rs"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f468a3b18ed840e8b50703f093de0855ad60688c19e644acbe8b3fd6f7f4ab8"
+checksum = "cb1c393be321a34d47005259530367be98d1f1de52ce78d6c6980341598eea0d"
 dependencies = [
  "itertools",
  "once_cell",

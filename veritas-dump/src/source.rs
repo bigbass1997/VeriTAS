@@ -35,7 +35,7 @@ impl std::fmt::Display for Source {
         match self {
             Self::Publication(id) => write!(f, "{id}M"),
             Self::Submission(id) => write!(f, "{id}S"),
-            Self::Userfile(id) => write!(f, "#{id}"),
+            Self::Userfile(id) => write!(f, "{id}U"),
             Self::Local(path) => write!(f, "{path}"),
         }
     }
@@ -45,7 +45,7 @@ impl Source {
     /// 
     /// Text is parsed in the following order, according to these rules:
     /// * **[Local](Source::Local)**: A local filepath to an existing file (excluding directories)
-    /// * **[Userfile](Source::Userfile)**: A number, optionally prefixed with a `#` symbol (`#1234567890123456789`)
+    /// * **[Userfile](Source::Userfile)**: A number, optionally prefixed with a `#` symbol or suffixed with a `U` (`#1234567890123456789`)
     /// * **[Submission](Source::Submission)**: A number followed by the letter `S` or `s` (`1234S`)
     /// * **[Publication](Source::Publication)**: A number followed by the letter `M` or `m` (`5678M`)
     pub fn parse<S: AsRef<str>>(text: S) -> Option<Self> {
@@ -65,7 +65,7 @@ impl Source {
             return None;
         }
         
-        if text.starts_with('#') && text.len() > 1 {
+        if (text.starts_with('#') || text.starts_with('U') || text.ends_with('U')) && text.len() > 1 {
             return Some(Userfile(text.split_at(1).1.parse().ok()?));
         }
         if text.chars().all(|c| c.is_ascii_digit()) {
@@ -103,13 +103,15 @@ impl Source {
                 let (gzip, name) = tasvideos_api_rs::get_userfile(*id).ok()?;
                 let data = Self::deflate(&gzip).unwrap_or(gzip);
                 
-                let filename = match name {
-                    Some(name) => match Utf8Path::new(&name).extension() {
+                let filename = match name.as_ref() {
+                    Some(name) => match Utf8Path::new(name).extension() {
                         Some(ext) => format!("{self}.{ext}"),
                         None => self.to_string(),
                     },
                     None => self.to_string(),
                 };
+                
+                tracing::trace!("Downloaded userfile #{id} | API name: {name:?} | Filename: {filename}");
                 
                 (data, filename)
             },
