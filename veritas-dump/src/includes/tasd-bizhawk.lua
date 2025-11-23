@@ -12,8 +12,9 @@ local playerKeys = {
     {"P2 Right", "P2 Left", "P2 Down", "P2 Up", "P2 Start", "P2 Select", "P2 B", "P2 A"}
 }
 
-if client.getversion() == "2.9" or client.getversion() == "2.9.1" or client.getversion() == "2.10" then
-	bit = (require "migration_helpers").EmuHawk_pre_2_9_bit()
+local migration_helpers = require("migration_helpers")
+if migration_helpers ~= nil then
+    bit = migration_helpers.EmuHawk_pre_2_9_bit()
 end
 
 package.loaded["tasd-api"] = nil
@@ -24,7 +25,7 @@ local api = require("tasd-api")
 console.clear()
 
 if client.SetSoundOn ~= nil then client.SetSoundOn(false) end
-if client.speedmode ~= nil then client.speedmode(400) end
+if client.speedmode ~= nil then client.speedmode(1600) end
 
 function getDumpFilename()
     local _, _, path, filename, ext = string.find(movie.filename(), "(.-)([^\\/]-%.?)([^%.\\/]*)$")
@@ -73,6 +74,7 @@ while true do
                 api.totalFrames(handle)
                 api.rerecords(handle)
                 api.blankFrames(handle, 0)
+                api.nesLatchFilter(8000)
                 api.portController(handle, 1, 0x0101)
                 api.portController(handle, 2, 0x0101)
                 handle:flush()

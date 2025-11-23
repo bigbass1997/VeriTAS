@@ -199,9 +199,9 @@ function api.portController(h, port, controllerType)
     packet(h, PORT_CONTROLLER, char(port)..encodeNumber(controllerType, 2))
 end
 
--- filter = number from 0x00 to 0xFF
+-- filter = number from 0x0000 to 0xFFFF
 function api.nesLatchFilter(h, filter)
-    packet(h, NES_LATCH_FILTER, char(filter))
+    packet(h, NES_LATCH_FILTER, encodeNumber(filter, 2))
 end
 
 -- filter = number from 0x00 to 0xFF
