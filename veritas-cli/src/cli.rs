@@ -105,5 +105,5 @@ pub struct ReplayArgs {
     pub disable_reset: bool,
     
     #[arg(long)]
-    pub n8auto: bool,
+    pub n8auto: Option<Utf8PathBuf>,
 }
