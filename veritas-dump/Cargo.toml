@@ -17,7 +17,7 @@ zip = "5.0"
 flate2 = "1.1"
 veritas-emulators = { version = "0.2.0", path = "../veritas-emulators" }
 base64ct = { version = "1.8", features = ["alloc"] }
-camino = "1.1"
+camino = "1.2"
 crossbeam = "0.8"
 
 tracing = "0.1"
