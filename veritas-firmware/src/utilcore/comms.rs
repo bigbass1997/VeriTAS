@@ -254,11 +254,14 @@ pub fn check_usb() {
                         System::Nes => {
                             use crate::systems::nes::INPUT_BUFFER;
                             let mut ptr = 0usize;
-                            while !INPUT_BUFFER.is_full() && ptr <= inputs.len() - 2 /*&& ptr < (u32::MAX - 1) as usize*/ {
-                                let input = [inputs[ptr], inputs[ptr + 1]];
-                                INPUT_BUFFER.enqueue(input);
-                                
-                                ptr += 2;
+                            
+                            if inputs.len() >= 2 {
+                                while !INPUT_BUFFER.is_full() && ptr <= inputs.len() - 2 /*&& ptr < (u32::MAX - 1) as usize*/ {
+                                    let input = [inputs[ptr], inputs[ptr + 1]];
+                                    INPUT_BUFFER.enqueue(input);
+                                    
+                                    ptr += 2;
+                                }
                             }
                             
                             USB.send_response(Response::BufferStatus {
