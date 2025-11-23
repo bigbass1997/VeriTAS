@@ -1,12 +1,15 @@
 //! 
 //! 
 //!
+
 use veritas_dump::cache::Cache;
 use clap::Parser;
-use crate::cli::{Args, Command, EncodeArgs, ReplayArgs};
+use crate::cli::{Args, Command};
 
 pub mod cli;
+pub mod encode;
 pub mod dump;
+pub mod replay;
 
 fn main() {
     let args: Args = Args::parse();
@@ -18,13 +21,15 @@ fn main() {
         trace.init();
     }
     
+    let cache = args.cache.unwrap_or("./cache/".into());
     match args.command {
-        Command::Dump(args) => dump::handle(args),
-        Command::Replay(args) => handle_replay(args),
-        Command::Encode(args) => handle_encode(args),
+        Command::Dump(args) => dump::handle(cache, args),
+        Command::Replay(args) => replay::handle_replay(cache, args),
+        Command::Encode(args) => encode::handle(cache, args),
     }
     
     return;
+    #[allow(unused)]
     {
     let mut cache = if let Ok(data) = std::fs::read("testcache2.bin") {
         println!("loading existing cache");
@@ -109,10 +114,4 @@ fn main() {
     }
 }
 
-fn handle_replay(args: ReplayArgs) {
-    
-}
 
-fn handle_encode(args: EncodeArgs) {
-    
-}

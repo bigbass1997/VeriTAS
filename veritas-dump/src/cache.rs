@@ -161,6 +161,7 @@ impl Cache {
 
 /// A bundle of hashes for some data using different hash algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Decode, Encode)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct HashBundle {
     pub sha1: [u8; 20],
     pub md5: [u8; 16],

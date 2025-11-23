@@ -8,6 +8,10 @@ pub struct Args {
     #[arg(long, short)]
     pub verbose: Option<LevelFilter>,
     
+    /// Specifies the directory VeriTAS should use for its local cache. Default: `./cache/`
+    #[arg(long)]
+    pub cache: Option<Utf8PathBuf>,
+    
     #[command(subcommand)]
     pub command: Command,
 }
@@ -21,21 +25,20 @@ pub enum Command {
 
 #[derive(Debug, Parser)]
 pub struct EncodeArgs {
+    #[arg(long)]
+    pub upload: bool,
+    
     #[arg(long, short)]
     pub trim: Option<String>,
     
-    #[arg(required = true)]
+    //#[arg(required = true)]
     pub inputs: Vec<Utf8PathBuf>,
     
-    pub output: Utf8PathBuf,
+    pub output: Option<Utf8PathBuf>,
 }
 
 #[derive(Debug, Parser)]
 pub struct DumpArgs {
-    /// Specifies the directory VeriTAS should use for its local cache. Default: `./cache/`
-    #[arg(long)]
-    pub cache: Option<Utf8PathBuf>,
-    
     /// Refreshes the ROM cache using all files found at the specified path.
     #[arg(short, long)]
     pub refresh: Option<Utf8PathBuf>,
@@ -89,8 +92,8 @@ pub struct ReplayArgs {
     #[arg(long, short)]
     pub device: Option<String>,
     
-    #[arg(long)]
-    pub list_devices: bool,
+    #[arg(short, long)]
+    pub list: bool,
     
     #[arg(long)]
     pub manual: Option<String>,
@@ -100,4 +103,7 @@ pub struct ReplayArgs {
     
     #[arg(long)]
     pub disable_reset: bool,
+    
+    #[arg(long)]
+    pub n8auto: bool,
 }

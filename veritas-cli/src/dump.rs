@@ -64,8 +64,7 @@ impl DumpConfig {
 }
 
 
-pub fn handle(args: DumpArgs) {
-    let cache_root = args.cache.unwrap_or("./cache/".into());
+pub fn handle(cache_root: Utf8PathBuf, args: DumpArgs) {
     let hashes_path = cache_root.join("hashes.bin");
     
     let mut cfg = DumpConfig::load(cache_root.join("dump_config.json")).expect("expected valid JSON file");
